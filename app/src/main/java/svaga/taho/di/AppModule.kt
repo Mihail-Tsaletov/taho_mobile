@@ -9,6 +9,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.ApiService
+import svaga.taho.utils.ActiveOrderManager
 import javax.inject.Singleton
 
 @Module
@@ -30,5 +31,13 @@ object AppModule {
     interface ApiProvider {
         fun apiService(): ApiService
         fun tokenManager(): TokenManager
+        fun activeOrderManager(): ActiveOrderManager
     }
+
+    @Provides
+    @Singleton
+    fun provideActiveOrderManager(
+        apiService: ApiService,
+        tokenManager: TokenManager
+    ): ActiveOrderManager = ActiveOrderManager(apiService, tokenManager)
 }

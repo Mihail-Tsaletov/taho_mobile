@@ -1,6 +1,8 @@
 package svaga.taho.ui.client
 
 import android.R.attr.data
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -32,23 +34,41 @@ import java.text.SimpleDateFormat
 import java.util.*
 import android.util.Log
 import android.widget.Toast
+import androidx.hilt.navigation.compose.hiltViewModel
 import dagger.hilt.android.EntryPointAccessors
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.ResponseBody
+import org.json.JSONObject
 import svaga.taho.data.remote.ApiService
 import svaga.taho.data.remote.CreateOrderRequest
 import svaga.taho.di.AppModule
+import svaga.taho.utils.ActiveOrderManager
+import java.io.IOException
+import java.util.concurrent.TimeUnit
 import kotlin.jvm.java
+
+private const val TAG = "ClientHomeScreen"
+private const val BASE_URL = "http://188.120.239.157:8081"
+private var currentSseJob by mutableStateOf<Job?>(null)
+var sseJob by mutableStateOf<Job?>(null)
 
 @Composable
 fun ClientHomeScreen() {
-    val TAG = "ClientHomeScreen"
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
 
-
+    // Состояние UI
     var fromAddress by remember { mutableStateOf("Откуда") }
     var toAddress by remember { mutableStateOf("Куда едем?") }
     var fromPoint by remember { mutableStateOf<Point?>(null) }
@@ -56,12 +76,35 @@ fun ClientHomeScreen() {
     var isOrderPlaced by remember { mutableStateOf(false) }
     var orderTime by remember { mutableStateOf("") }
 
+    var showOrderDetails by remember { mutableStateOf(false) }
+
+    var currentStatus by remember { mutableStateOf("В обработке") }
+    var driverName by remember { mutableStateOf<String?>(null) }
+    var driverPhone by remember { mutableStateOf<String?>(null) }
+
     var fromInput by remember { mutableStateOf("") }
     var toInput by remember { mutableStateOf("") }
     var fromSuggestions by remember { mutableStateOf<List<SuggestItem>>(emptyList()) }
     var toSuggestions by remember { mutableStateOf<List<SuggestItem>>(emptyList()) }
+    var focusedField by remember { mutableStateOf<String?>(null) }
 
-    var focusedField by remember { mutableStateOf<String?>(null) } // "from" или "to" или null
+    // Получаем токен и ApiService
+    val tokenManager = remember {
+        EntryPointAccessors.fromApplication(context, AppModule.ApiProvider::class.java)
+            .tokenManager()
+    }
+    val apiService = remember {
+        EntryPointAccessors.fromApplication(context, AppModule.ApiProvider::class.java).apiService()
+    }
+
+    // Активный заказ — сверху экрана
+    val activeOrderManager = remember {
+        EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            AppModule.ApiProvider::class.java
+        ).activeOrderManager()
+    }
+    val activeOrder by activeOrderManager.activeOrder.collectAsState()
 
     val suggestSession = remember {
         SearchFactory.getInstance()
@@ -69,30 +112,101 @@ fun ClientHomeScreen() {
             .createSuggestSession()
     }
 
+// Загружаем активный заказ при запуске
+    LaunchedEffect(Unit) {
+        activeOrderManager.loadActiveOrder()
+    }
+
+    LaunchedEffect(activeOrder) {
+        activeOrder?.let { order ->
+            Log.d(TAG, "Активный заказ загружен: ${order.id}")
+            showOrderDetails = false
+
+            fromAddress = order.startAddress
+            toAddress = order.endAddress
+            isOrderPlaced = false
+            currentStatus = when (order.status) {
+                "ACCEPTED", "PICKED_UP" -> "Заказ принят"
+                "ARRIVED" -> "Водитель на месте"
+                "IN_PROGRESS" -> "В пути"
+                "COMPLETED", "CANCELLED" -> {
+                    activeOrderManager.clear()
+                    return@LaunchedEffect
+                }
+                else -> currentStatus
+            }
+            driverName = order.driverName
+            driverPhone = order.driverPhone
+
+            // Запускаем SSE
+            sseJob?.cancel()
+            val token = tokenManager.tokenFlow.first()!!
+            sseJob = coroutineScope.launch {
+                sseSubscribe(order.id, token) { json ->
+                    Log.d(TAG, "SSE получил: $json")
+                    val status = json.optString("status", "")
+                    if (status.isNotEmpty()) {
+                        currentStatus = when (status) {"ACCEPTED", "PICKED_UP" -> "Заказ принят"
+                            "ARRIVED" -> "Водитель на месте"
+                            "IN_PROGRESS" -> "В пути"
+                            "COMPLETED" -> {
+                                "Поездка завершена"
+                                activeOrderManager.clear()
+                                showOrderDetails = false
+                                disconnectSse()
+                                return@sseSubscribe
+                            }
+
+                            "CANCELLED" -> {
+                                "Заказ отменён"
+                                activeOrderManager.clear()
+                                showOrderDetails = false
+                                disconnectSse()
+                                Log.d(TAG, "Заказ отменён — SSE закрыт")
+                                return@sseSubscribe
+                            }
+                            else -> currentStatus
+                        }.toString()
+                    }
+
+                    json.optString("driverName").takeIf { it.isNotBlank() }?.let { driverName = it }
+                    json.optString("driverPhone").takeIf { it.isNotBlank() }?.let { driverPhone = it }
+                }
+            }
+        }?: run {
+            // Нет активного заказа — чистим всё
+            showOrderDetails = false
+            isOrderPlaced = false
+            currentStatus = "В обработке"
+            driverName = null
+            driverPhone = null
+            sseJob?.cancel()
+        }
+    }
+
+
     // Подсказки для "Откуда"
-    LaunchedEffect(fromInput) {
+    LaunchedEffect(fromInput, focusedField) {
         val hugeBox = BoundingBox(Point(41.0, 19.0), Point(74.0, 180.0))
         if (focusedField == "from" && fromInput.length > 2) {
             suggestSession.suggest(
                 fromInput,
-                hugeBox, // вся страна
+                hugeBox,
                 SuggestOptions(),
                 object : SuggestSession.SuggestListener {
                     override fun onResponse(response: SuggestResponse) {
                         fromSuggestions = response.items.take(8)
                     }
+
                     override fun onError(error: Error) {
                         fromSuggestions = emptyList()
                     }
-                }
-            )
-        } else {
-            fromSuggestions = emptyList()
-        }
+                })
+        } else fromSuggestions = emptyList()
     }
 
     // Подсказки для "Куда"
-    LaunchedEffect(toInput) {
+    LaunchedEffect(toInput, focusedField) {
         val hugeBox = BoundingBox(Point(41.0, 19.0), Point(74.0, 180.0))
         if (focusedField == "to" && toInput.length > 2) {
             suggestSession.suggest(
@@ -103,14 +217,12 @@ fun ClientHomeScreen() {
                     override fun onResponse(response: SuggestResponse) {
                         toSuggestions = response.items.take(8)
                     }
+
                     override fun onError(error: Error) {
                         toSuggestions = emptyList()
                     }
-                }
-            )
-        } else {
-            toSuggestions = emptyList()
-        }
+                })
+        } else toSuggestions = emptyList()
     }
 
     DisposableEffect(Unit) {
@@ -123,15 +235,44 @@ fun ClientHomeScreen() {
         AndroidView(
             factory = { ctx ->
                 MapView(ctx).apply {
-                    mapWindow.map.move(CameraPosition(Point(55.7558, 37.6173), 10f, 0f, 0f))
+                    mapWindow.map.move(
+                        CameraPosition(
+                            Point(
+                                55.7558,
+                                37.6173
+                            ), 10f, 0f, 0f
+                        )
+                    )
                 }
             },
             modifier = Modifier.fillMaxSize(),
-            update = { view ->
-                view.onStart()
-                MapKitFactory.getInstance().onStart()
-            }
+            update = { view -> view.onStart(); MapKitFactory.getInstance().onStart() }
         )
+
+        if (activeOrder != null && !showOrderDetails) {
+            Card(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .clickable {
+                        showOrderDetails = true  // открываем нижнюю карточку
+                        },
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E88E5)),
+                elevation = CardDefaults.cardElevation(8.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Активный заказ", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text("От: $fromAddress", color = Color.White.copy(alpha = 0.9f))
+                    Text("До: $toAddress", color = Color.White.copy(alpha = 0.9f))
+                    Text("Статус: $currentStatus", color = Color.White)
+                    driverName?.let {
+                        Text("Водитель: $it", color = Color.White, fontWeight = FontWeight.Medium)
+                    }
+                }
+            }
+        }
 
         Column(
             modifier = Modifier
@@ -140,20 +281,82 @@ fun ClientHomeScreen() {
                 .background(Color.White)
                 .padding(16.dp)
         ) {
-            if (isOrderPlaced) {
-                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)), modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(20.dp)) {
-                        Text("Заказ создан", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            if (showOrderDetails || (isOrderPlaced && activeOrder == null)) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = "Заказ",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp
+                        )
+
                         Spacer(Modifier.height(12.dp))
+
+                        // Живой статус
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .background(
+                                        color = when {
+                                            currentStatus.contains("Заказ принят") -> Color.Green
+                                            currentStatus.contains("Водитель на месте") -> Color.Blue
+                                            currentStatus.contains("Водитель назначен") -> Color(
+                                                0xFFFFA000
+                                            )
+
+                                            currentStatus.contains("Поездка завершена") -> Color.Gray
+                                            else -> Color.Yellow
+                                        },
+                                        shape = CircleShape
+                                    )
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = currentStatus,
+                                fontWeight = FontWeight.Medium,
+                                color = when {
+                                    currentStatus.contains("принят") -> Color.Green
+                                    currentStatus.contains("завершена") -> Color.Gray
+                                    else -> Color.Black
+                                }
+                            )
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        // Водитель
+                        driverName?.let { name ->
+                            Text(
+                                "Водитель: $name",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 18.sp
+                            )
+                        }
+
+                        driverPhone?.let { phone ->
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = "Телефон: $phone",
+                                color = Color.Blue,
+                                modifier = Modifier.clickable {
+                                    // Позвонить водителю
+                                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
+                                    context.startActivity(intent)
+                                }
+                            )
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
                         Text("Откуда: $fromAddress")
                         Text("Куда: $toAddress")
                         Text("Время: $orderTime")
-                        Spacer(Modifier.height(12.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(12.dp).background(Color.Yellow, CircleShape))
-                            Spacer(Modifier.width(8.dp))
-                            Text("В обработке")
-                        }
+
+                        // Если нужно — можно добавить кнопку "Отменить" и т.д.
                     }
                 }
             } else {
@@ -244,12 +447,16 @@ fun ClientHomeScreen() {
                 Button(
                     onClick = {
                         coroutineScope.launch {
-                            orderTime = SimpleDateFormat("HH:mm, dd MMM", Locale("ru")).format(Date())
+                            orderTime =
+                                SimpleDateFormat("HH:mm, dd MMM", Locale("ru")).format(Date())
                             isOrderPlaced = true
 
+
                             // Формируем строки в формате "lat, lon"
-                            val startStr = fromPoint?.let { "${it.latitude}, ${it.longitude}" } ?: ""
+                            val startStr =
+                                fromPoint?.let { "${it.latitude}, ${it.longitude}" } ?: ""
                             val endStr = toPoint?.let { "${it.latitude}, ${it.longitude}" } ?: ""
+                            val token = tokenManager.tokenFlow.first() ?: ""
 
                             val request = CreateOrderRequest(
                                 startPoint = startStr,
@@ -261,15 +468,8 @@ fun ClientHomeScreen() {
                             Log.d(TAG, "Отправляем заказ: $request")
 
                             try {
-                                val tokenManager = EntryPointAccessors.fromApplication(
-                                    context.applicationContext,
-                                    AppModule.ApiProvider::class.java
-                                ).tokenManager()
-
-                                // Получаем токен из DataStore
-                                val token = tokenManager.tokenFlow.first() ?: throw Exception("Нет токена")
-
-                                // Получаем ApiService
+                                val token =
+                                    tokenManager.tokenFlow.first() ?: throw Exception("Нет токена")
                                 val api = EntryPointAccessors.fromApplication(
                                     context.applicationContext,
                                     AppModule.ApiProvider::class.java
@@ -277,21 +477,68 @@ fun ClientHomeScreen() {
 
                                 // Отправляем с заголовком Authorization
                                 val response = api.createOrder("Bearer $token", request)
-                                // ←←←←←←←←←←←←←←←←←←←←←←←←←←
 
-                                Log.d(TAG, "Заказ успешно создан: $response")
+                                val orderId = response.body()?.string()?.trim('"')
+                                    ?: throw Exception("Пустой ответ от сервера")
+
+                                Log.d(TAG, "Заказ создан, ID: $orderId")
+
+                                // Запускаем SSE сразу после создания заказа
+                                sseJob = coroutineScope.launch {
+                                    sseSubscribe(orderId, token) { json ->
+                                        Log.d(TAG, "SSE получил: $json")
+                                        val status = json.optString("status", "")
+                                        if (status.isNotEmpty()) {
+                                            currentStatus = when (status) {
+                                                "ACCEPTED", "PICKED_UP" -> "Заказ принят"
+                                                "ARRIVED" -> "Водитель на месте"
+                                                "Assigned" -> "Водитель назначен"
+                                                "COMPLETED" -> {
+                                                    "Поездка завершена"
+                                                    disconnectSse()
+                                                    Log.d(TAG, "Заказ завершён — SSE закрыт")
+                                                }
+
+                                                "CANCELLED" -> {
+                                                    "Заказ отменён"
+                                                    disconnectSse()
+                                                    Log.d(TAG, "Заказ отменён — SSE закрыт")
+                                                }
+
+                                                else -> "Статус: $status"
+                                            }.toString()
+                                        }
+                                        json.optString("driverName").takeIf { it.isNotBlank() }
+                                            ?.let {
+                                                driverName = it
+                                            }
+
+                                        json.optString("driverPhone").takeIf { it.isNotBlank() }
+                                            ?.let {
+                                                driverPhone = it
+                                            }
+                                    }
+                                }
+
+                                Log.d(TAG, "Заказ успешно создан: $orderId")
                             } catch (e: Exception) {
                                 Log.e(TAG, "Ошибка создания заказа", e)
-                                Toast.makeText(context, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "Ошибка: ${e.message}", Toast.LENGTH_LONG)
+                                    .show()
                             }
                         }
                     },
                     enabled = fromPoint != null && toPoint != null,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    if (isOrderPlaced) {
-                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                    if (isOrderPlaced ) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
                     } else {
                         Text("Заказать такси", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     }
@@ -302,7 +549,84 @@ fun ClientHomeScreen() {
 
     DisposableEffect(Unit) {
         onDispose {
+            sseJob?.cancel()
+            sseJob = null
+            Log.d(TAG, "Экран закрыт — SSE отключён")
             MapKitFactory.getInstance().onStop()
         }
     }
 }
+
+private fun CoroutineScope.sseSubscribe(
+    orderId: String,
+    token: String,
+    onUpdate: (JSONObject) -> Unit
+) {
+    launch(Dispatchers.IO) execute@{
+        val client = OkHttpClient.Builder()
+            .readTimeout(0, TimeUnit.MILLISECONDS)  // бесконечно
+            .writeTimeout(0, TimeUnit.MILLISECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .build()
+
+        val request = Request.Builder()
+            .url("$BASE_URL/api/sse/subscribe/$orderId")
+            .addHeader("Authorization", "Bearer $token")
+            .addHeader("Accept", "text/event-stream")
+            .addHeader("Cache-Control", "no-cache")
+            .build()
+
+        try {
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                Log.e(TAG, "SSE: ошибка ${response.code}")
+                return@execute
+            }
+
+            val body = response.body ?: return@execute
+            val source = body.source()
+            var buffer = StringBuilder()
+
+            while (!source.exhausted()) {
+                val line = source.readUtf8Line() ?: break
+                Log.d("SSE_RAW", "Строка: $line")
+
+                buffer.append(line).append("\n")
+
+                if (line.isBlank()) {
+                    val eventData = buffer.toString()
+                    Log.d("SSE_EVENT", "Событие:\n$eventData")
+
+                    if (eventData.contains("data:")) {
+                        val jsonString = eventData.lines()
+                            .filter { it.startsWith("data:") }
+                            .joinToString("") { it.removePrefix("data:").trim() }
+
+                        if (jsonString.isNotEmpty()) {
+                            try {
+                                val json = JSONObject(jsonString)
+                                Log.d("SSE_JSON", "JSON: $json")
+                                withContext(Dispatchers.Main) {
+                                    onUpdate(json)
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Ошибка парсинга JSON: $jsonString", e)
+                            }
+                        }
+                    }
+                    buffer = StringBuilder() // очищаем буфер
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "SSE упало", e)
+        }
+    }
+}
+
+private fun disconnectSse() {
+    currentSseJob?.cancel()
+    currentSseJob = null
+    Log.d(TAG, "SSE соединение закрыто")
+}
+
+
