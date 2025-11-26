@@ -4,6 +4,7 @@ package svaga.taho.ui.driver
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -34,6 +35,9 @@ import svaga.taho.data.remote.DriverOrder
 import svaga.taho.di.AppModule
 import svaga.taho.ui.auth.AuthViewModel
 import svaga.taho.util.SseClient
+import android.widget.Toast
+import kotlinx.coroutines.Job
+import svaga.taho.util.playNotificationSound
 import java.util.*
 
 private const val TAG = "DriverHomeScreen"
@@ -44,9 +48,12 @@ fun DriverHomeScreen() {
     val scope = rememberCoroutineScope()
 
     var currentOrder by remember { mutableStateOf<DriverOrder?>(null) }
+    var activeOrder by remember { mutableStateOf<DriverOrder?>(null) }
     var routePolyline by remember { mutableStateOf<PolylineMapObject?>(null) }
     var driverMarker by remember { mutableStateOf<PlacemarkMapObject?>(null) }
     var mapObjects by remember { mutableStateOf<MapObjectCollection?>(null) }
+
+    var newOrdersSseJob by remember { mutableStateOf<Job?>(null) }
 
     val carIcon = ImageProvider.fromResource(context, R.drawable.ic_car_driver)
 
@@ -67,11 +74,56 @@ fun DriverHomeScreen() {
     val token by authViewModel.currentToken.collectAsState(initial = "")
 
     // Получаем ApiService
-    val apiService = remember {
+    val api = remember {
         EntryPointAccessors.fromApplication(
             context.applicationContext,
             AppModule.ApiProvider::class.java
         ).apiService()
+    }
+
+
+    // 1. Подписка на новые заказы — при запуске
+    LaunchedEffect(Unit) {
+        if (token?.isNotEmpty() == true) {
+            newOrdersSseJob = launch {
+                sseClient.subscribe(
+                    orderId = "driver", // → /api/sse/subscribe/driver
+                    token = token!!,
+                    scope = this,
+                    onUpdate = { json ->
+                        Log.d(TAG, "Новый заказ: $json")
+
+                        val order = DriverOrder(
+                            id = json.getString("id"),
+                            startPoint = Point(json.getDouble("startLat"), json.getDouble("startLon")),
+                            endPoint = Point(json.getDouble("endLat"), json.getDouble("endLon")),
+                            startAddress = json.getString("startAddress"),
+                            endAddress = json.getString("endAddress"),
+                            passengerName = json.getString("passengerName"),
+                            passengerPhone = json.getString("passengerPhone"),
+                            price = json.getString("price"),
+                            status = json.getString("status"),
+                            distance = json.getString("distance")
+                        )
+
+                        currentOrder = order
+
+                        // Звук + вибрация
+                        playNotificationSound(context)
+                        //vibrateDevice(context)
+
+                        // Строим маршрут
+                        buildRoute(order.startPoint, order.endPoint) { points ->
+                            routePolyline?.let { mapObjects?.remove(it) }
+                            routePolyline = mapObjects?.addPolyline(Polyline(points))
+                                ?.apply { setStrokeColor(0xFF1E88E5.toInt()); strokeWidth = 8f }
+
+                            animateDriver(order.startPoint, points, mapObjects, carIcon)
+                        }
+                    }
+                )
+            }
+        }
     }
 
     // SSE — новые заказы
@@ -93,10 +145,15 @@ fun DriverHomeScreen() {
                         passengerName = json.getString("passengerName"),
                         passengerPhone = json.getString("passengerPhone"),
                         price = json.getString("price"),
-                        status = json.getString("status")
+                        status = json.getString("status"),
+                        distance = json.getString("distance")
                     )
 
                     currentOrder = order
+
+                    // Звук + вибрация
+                    playNotificationSound(context)
+                    //vibrateDevice(context)
 
                     // Строим маршрут
                     buildRoute(order.startPoint, order.endPoint) { points ->
@@ -132,75 +189,68 @@ fun DriverHomeScreen() {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(12.dp)
+                    .padding(16.dp)
+                    .animateContentSize(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFE91E63)),
+                elevation = CardDefaults.cardElevation(16.dp)
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
+                Column(modifier = Modifier.padding(24.dp)) {
                     Text(
-                        text = if (order.status == "NEW") "Новый заказ!" else "Заказ принят",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 22.sp,
-                        color = if (order.status == "NEW") Color(0xFFE91E63) else Color.Green
+                        text = "Новый заказ!",
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
                     )
-
                     Spacer(Modifier.height(12.dp))
+                    Text("Откуда: ${order.startAddress}", color = Color.White)
+                    Text("Куда: ${order.endAddress}", color = Color.White)
+                    Text("Расстояние: ${order.distance}", color = Color.White)
+                    Text("Цена: ${order.price} ₽", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
 
-                    Text("Откуда: ${order.startAddress}")
-                    Text("Куда: ${order.endAddress}")
-                    Text("Цена: ${order.price} ₽")
+                    Spacer(Modifier.height(20.dp))
 
-                    Spacer(Modifier.height(16.dp))
-
-                    if (order.status == "NEW") {
-                        Row {
-                            Button(
-                                onClick = {
-                                    scope.launch {
-                                        try {
-                                            apiService.acceptOrder("Bearer $token", order.id)
-                                            currentOrder = order.copy(status = "ACCEPTED")
-                                        } catch (e: Exception) {
-                                            Log.e(TAG, "Не удалось принять заказ", e)
-                                        }
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Button(
+                            onClick = {
+                                // Принять заказ
+                                scope.launch {
+                                    try {
+                                        api.acceptOrder("Bearer $token", order.id)
+                                        activeOrder = DriverOrder(
+                                            id = order.id,
+                                            startPoint = Point(0.0, 0.0), // потом построим маршрут
+                                            endPoint = Point(0.0, 0.0),
+                                            startAddress = order.startAddress,
+                                            endAddress = order.endAddress,
+                                            passengerName = order.passengerName,
+                                            passengerPhone = order.passengerPhone,
+                                            price = order.price,
+                                            distance = order.distance,
+                                            status = order.status
+                                        )
+                                        currentOrder = null
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Не удалось принять", Toast.LENGTH_SHORT).show()
                                     }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Принять", color = Color.White)
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            OutlinedButton(
-                                onClick = { currentOrder = null },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Отклонить")
-                            }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Принять", color = Color(0xFFE91E63), fontSize = 18.sp)
                         }
-                    } else {
-                        Text("Пассажир: ${order.passengerName}", fontWeight = FontWeight.Medium)
-                        Text(
-                            text = "Позвонить: ${order.passengerPhone}",
-                            color = Color.Blue,
-                            modifier = Modifier.clickable {
-                                context.startActivity(
-                                    Intent(Intent.ACTION_DIAL, Uri.parse("tel:${order.passengerPhone}"))
-                                )
-                            }
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Button(onClick = {
-                            scope.launch {
-                                apiService.driverArrived("Bearer $token", order.id)
-                            }
-                        }) {
-                            Text("Я на месте")
+
+                        OutlinedButton(
+                            onClick = { currentOrder = null },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Отклонить", color = Color.White)
                         }
                     }
                 }
             }
         }
+        // ←←←←←←←←←←←←←←←←←←←←←←←←
     }
 
     DisposableEffect(Unit) {

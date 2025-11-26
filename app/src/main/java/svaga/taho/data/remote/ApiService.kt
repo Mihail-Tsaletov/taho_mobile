@@ -23,6 +23,9 @@ interface ApiService {
     @POST("api/auth/login")
     suspend fun login(@Body request: LoginRequest): LoginResponse
 
+    @GET("api/sse/subscribe/driver")
+    suspend fun subscribeDriverToNewOrders(): Response<ResponseBody>
+
     @POST("api/orders")
     suspend fun createOrder(@Body request: CreateOrderRequest): Response<ResponseBody>
 

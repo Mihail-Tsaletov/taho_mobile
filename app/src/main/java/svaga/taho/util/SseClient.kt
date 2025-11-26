@@ -98,5 +98,18 @@ class SseClient @Inject constructor() {
         currentJob = null
         Log.d(TAG, "SSE отключён")
     }
+
+    fun subscribeAsDriver(
+        token: String,
+        scope: CoroutineScope,
+        onUpdate: (JSONObject) -> Unit
+    ) {
+        subscribe(
+            orderId = "driver", // → URL будет /api/sse/subscribe/driver
+            token = token,
+            scope = scope,
+            onUpdate = onUpdate
+        )
+    }
 }
 

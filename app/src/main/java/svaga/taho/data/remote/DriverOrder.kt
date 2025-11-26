@@ -11,5 +11,6 @@ data class DriverOrder(
     val passengerName: String,
     val passengerPhone: String,
     val price: String,
-    val status: String
+    val status: String,
+    val distance: String
 )
