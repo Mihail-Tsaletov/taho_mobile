@@ -35,6 +35,12 @@ class TokenManager @Inject constructor(
         }
     }
 
+    suspend fun saveToken(token: String) {
+        dataStore.edit { prefs ->
+            prefs[TOKEN_KEY] = token
+        }
+    }
+
     suspend fun setLastModeDriver(isDriver: Boolean) {
         dataStore.edit { it[LAST_MODE_DRIVER] = isDriver }
     }

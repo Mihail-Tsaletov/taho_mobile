@@ -1,10 +1,14 @@
 package svaga.taho.ui.auth
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.ApiService
@@ -12,6 +16,8 @@ import svaga.taho.data.remote.LoginRequest
 import svaga.taho.data.remote.RegisterRequest
 import svaga.taho.util.parseJwtRole
 import javax.inject.Inject
+
+private const val TAG = "AuthViewModel"
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
@@ -21,6 +27,8 @@ class AuthViewModel @Inject constructor(
 
     private val _event = MutableSharedFlow<AuthEvent>(extraBufferCapacity = 1)
     val event = _event.asSharedFlow()
+    private val _currentToken = MutableStateFlow<String?>(null)
+    val currentToken: StateFlow<String?> = _currentToken.asStateFlow()
 
     sealed class AuthEvent {
         object ToRegister : AuthEvent()
@@ -56,11 +64,14 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _event.emit(AuthEvent.Loading)
             try {
+                Log.d(TAG, "phone: $phone, password: $password")
                 val response = api.login(LoginRequest(phone, password))
+                Log.d(TAG, "response: $response")
                 val roleFromToken = parseJwtRole(response.token)
                     ?: throw IllegalStateException("Не удалось определить роль из токена")
 
                 tokenManager.saveAuth(response.token, roleFromToken)
+                _currentToken.value = response.token
 
                 when (roleFromToken) {
                     "CLIENT" -> _event.emit(AuthEvent.ToClientHome)

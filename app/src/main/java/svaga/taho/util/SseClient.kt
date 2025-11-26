@@ -1,84 +1,102 @@
+// svaga.taho.util/SseClient.kt
 package svaga.taho.util
 
 import android.util.Log
+import androidx.compose.runtime.Composable
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import okhttp3.*
+import okhttp3.logging.HttpLoggingInterceptor
 import okio.ByteString
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class SseClient(
-    private val baseUrl: String,
-    private val token: String
-) {
-    private var client = OkHttpClient.Builder()
-        .readTimeout(0, TimeUnit.MILLISECONDS)     // бесконечный read timeout
+private const val TAG = "SseClient"
+private const val BASE_URL = "http://188.120.239.157:8081"
+
+@Singleton
+class SseClient @Inject constructor() {
+    private val client = OkHttpClient.Builder()
+        .readTimeout(0, TimeUnit.MILLISECONDS)
         .writeTimeout(0, TimeUnit.MILLISECONDS)
         .connectTimeout(10, TimeUnit.SECONDS)
-        .retryOnConnectionFailure(true)
         .build()
 
-    fun subscribe(orderId: Long): Flow<JSONObject> = callbackFlow {
-        val request = Request.Builder()
-            .url("$baseUrl/api/sse/subscribe/$orderId")
-            .addHeader("Authorization", "Bearer $token")
-            .addHeader("Accept", "text/event-stream")
-            .addHeader("Cache-Control", "no-cache")
-            .build()
+    private var currentJob: Job? = null
 
-        val call = client.newCall(request)
+    fun subscribe(
+        orderId: String,
+        token: String,
+        scope: CoroutineScope,
+        onUpdate: (JSONObject) -> Unit,
+        onError: (Throwable) -> Unit = {}
+    ) {
+        // Отменяем предыдущее соединение
+        currentJob?.cancel()
 
-        val response = call.execute()
-        if (!response.isSuccessful) {
-            trySend(JSONObject().apply { put("error", "HTTP ${response.code}") })
-            close()
-            return@callbackFlow
-        }
+        currentJob = scope.launch(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url("$BASE_URL/api/sse/subscribe/$orderId")
+                .addHeader("Authorization", "Bearer $token")
+                .addHeader("Accept", "text/event-stream")
+                .addHeader("Cache-Control", "no-cache")
+                .build()
 
-        val body = response.body ?: run {
-            close()
-            return@callbackFlow
-        }
-
-        val source = body.source()
-
-        var buffer = ""
-
-        while (!isClosedForSend) {
             try {
-                val line = source.readUtf8Line() ?: break
-                buffer += line + "\n"
+                val response = client.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    withContext(Dispatchers.Main) {
+                        onError(Exception("HTTP ${response.code}"))
+                    }
+                    return@launch
+                }
 
-                if (line.isBlank()) {
-                    // Конец события
-                    if (buffer.contains("data:")) {
-                        val dataLines = buffer.split("\n")
-                            .filter { it.startsWith("data:") }
-                            .map { it.removePrefix("data:").trim() }
+                val body = response.body ?: return@launch
+                val source = body.source()
+                var buffer = StringBuilder()
 
-                        val jsonString = dataLines.joinToString("")
-                        if (jsonString.isNotEmpty()) {
-                            try {
-                                val json = JSONObject(jsonString)
-                                trySend(json)
-                            } catch (e: Exception) {
-                                Log.e("SSE", "Ошибка парсинга JSON: $jsonString", e)
+                while (isActive && !source.exhausted()) {
+                    val line = source.readUtf8Line() ?: break
+                    Log.d(TAG, "SSE ← $line")
+
+                    buffer.append(line).append("\n")
+
+                    if (line.isBlank()) {
+                        val eventData = buffer.toString()
+                        if (eventData.contains("data:")) {
+                            val jsonString = eventData.lines()
+                                .filter { it.startsWith("data:") }
+                                .joinToString("") { it.removePrefix("data:").trim() }
+
+                            if (jsonString.isNotEmpty()) {
+                                try {
+                                    val json = JSONObject(jsonString)
+                                    withContext(Dispatchers.Main) {
+                                        onUpdate(json)
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "JSON parse error: $jsonString", e)
+                                }
                             }
                         }
+                        buffer = StringBuilder()
                     }
-                    buffer = ""
                 }
             } catch (e: Exception) {
-                Log.e("SSE", "Ошибка чтения SSE", e)
-                break
+                if (isActive) {
+                    withContext(Dispatchers.Main) {
+                        onError(e)
+                    }
+                }
             }
         }
+    }
 
-        awaitClose {
-            response.close()
-        }
+    fun disconnect() {
+        currentJob?.cancel()
+        currentJob = null
+        Log.d(TAG, "SSE отключён")
     }
 }
+

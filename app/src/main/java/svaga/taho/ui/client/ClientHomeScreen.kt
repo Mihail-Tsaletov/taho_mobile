@@ -52,6 +52,7 @@ import org.json.JSONObject
 import svaga.taho.data.remote.ApiService
 import svaga.taho.data.remote.CreateOrderRequest
 import svaga.taho.di.AppModule
+import svaga.taho.ui.auth.AuthViewModel
 import svaga.taho.utils.ActiveOrderManager
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -88,11 +89,21 @@ fun ClientHomeScreen() {
     var toSuggestions by remember { mutableStateOf<List<SuggestItem>>(emptyList()) }
     var focusedField by remember { mutableStateOf<String?>(null) }
 
+    val sseClient = remember {
+        EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            AppModule.ApiProvider::class.java
+        ).sseClient()
+    }
+
     // Получаем токен и ApiService
     val tokenManager = remember {
         EntryPointAccessors.fromApplication(context, AppModule.ApiProvider::class.java)
             .tokenManager()
     }
+    val authViewModel: AuthViewModel = hiltViewModel()
+    val token by authViewModel.currentToken.collectAsState(initial = "")
+
     val apiService = remember {
         EntryPointAccessors.fromApplication(context, AppModule.ApiProvider::class.java).apiService()
     }
@@ -133,6 +144,7 @@ fun ClientHomeScreen() {
                     activeOrderManager.clear()
                     return@LaunchedEffect
                 }
+
                 else -> currentStatus
             }
             driverName = order.driverName
@@ -140,40 +152,47 @@ fun ClientHomeScreen() {
 
             // Запускаем SSE
             sseJob?.cancel()
-            val token = tokenManager.tokenFlow.first()!!
             sseJob = coroutineScope.launch {
-                sseSubscribe(order.id, token) { json ->
-                    Log.d(TAG, "SSE получил: $json")
-                    val status = json.optString("status", "")
-                    if (status.isNotEmpty()) {
-                        currentStatus = when (status) {"ACCEPTED", "PICKED_UP" -> "Заказ принят"
-                            "ARRIVED" -> "Водитель на месте"
-                            "IN_PROGRESS" -> "В пути"
-                            "COMPLETED" -> {
-                                "Поездка завершена"
-                                activeOrderManager.clear()
-                                showOrderDetails = false
-                                disconnectSse()
-                                return@sseSubscribe
-                            }
+                sseClient.subscribe(
+                    order.id,
+                    token.toString(),
+                    coroutineScope,
+                    onUpdate = { json ->
+                        Log.d(TAG, "SSE получил: $json")
+                        val status = json.optString("status", "")
+                        if (status.isNotEmpty()) {
+                            currentStatus = when (status) {
+                                "ACCEPTED", "PICKED_UP" -> "Заказ принят"
+                                "ARRIVED" -> "Водитель на месте"
+                                "IN_PROGRESS" -> "В пути"
+                                "COMPLETED" -> {
+                                    "Поездка завершена"
+                                    activeOrderManager.clear()
+                                    showOrderDetails = false
+                                    sseClient.disconnect()
+                                }
 
-                            "CANCELLED" -> {
-                                "Заказ отменён"
-                                activeOrderManager.clear()
-                                showOrderDetails = false
-                                disconnectSse()
-                                Log.d(TAG, "Заказ отменён — SSE закрыт")
-                                return@sseSubscribe
-                            }
-                            else -> currentStatus
-                        }.toString()
-                    }
+                                "CANCELLED" -> {
+                                    "Заказ отменён"
+                                    activeOrderManager.clear()
+                                    showOrderDetails = false
+                                    sseClient.disconnect()
+                                    Log.d(TAG, "Заказ отменён — SSE закрыт")
+                                }
 
-                    json.optString("driverName").takeIf { it.isNotBlank() }?.let { driverName = it }
-                    json.optString("driverPhone").takeIf { it.isNotBlank() }?.let { driverPhone = it }
-                }
+                                else -> currentStatus
+                            }.toString()
+                        }
+
+                        json.optString("driverName").takeIf { it.isNotBlank() }
+                            ?.let { driverName = it }
+                        json.optString("driverPhone").takeIf { it.isNotBlank() }
+                            ?.let { driverPhone = it }
+                    }, onError = { e ->
+                        Log.e("SSE", "Ошибка", e)
+                    })
             }
-        }?: run {
+        } ?: run {
             // Нет активного заказа — чистим всё
             showOrderDetails = false
             isOrderPlaced = false
@@ -227,7 +246,7 @@ fun ClientHomeScreen() {
 
     DisposableEffect(Unit) {
         MapKitFactory.initialize(context)
-        onDispose {}
+        onDispose { sseClient.disconnect() }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -257,12 +276,17 @@ fun ClientHomeScreen() {
                     .padding(16.dp)
                     .clickable {
                         showOrderDetails = true  // открываем нижнюю карточку
-                        },
+                    },
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1E88E5)),
                 elevation = CardDefaults.cardElevation(8.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Активный заказ", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(
+                        "Активный заказ",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
                     Spacer(Modifier.height(8.dp))
                     Text("От: $fromAddress", color = Color.White.copy(alpha = 0.9f))
                     Text("До: $toAddress", color = Color.White.copy(alpha = 0.9f))
@@ -456,7 +480,6 @@ fun ClientHomeScreen() {
                             val startStr =
                                 fromPoint?.let { "${it.latitude}, ${it.longitude}" } ?: ""
                             val endStr = toPoint?.let { "${it.latitude}, ${it.longitude}" } ?: ""
-                            val token = tokenManager.tokenFlow.first() ?: ""
 
                             val request = CreateOrderRequest(
                                 startPoint = startStr,
@@ -468,15 +491,13 @@ fun ClientHomeScreen() {
                             Log.d(TAG, "Отправляем заказ: $request")
 
                             try {
-                                val token =
-                                    tokenManager.tokenFlow.first() ?: throw Exception("Нет токена")
                                 val api = EntryPointAccessors.fromApplication(
                                     context.applicationContext,
                                     AppModule.ApiProvider::class.java
                                 ).apiService()
 
                                 // Отправляем с заголовком Authorization
-                                val response = api.createOrder("Bearer $token", request)
+                                val response = api.createOrder(request)
 
                                 val orderId = response.body()?.string()?.trim('"')
                                     ?: throw Exception("Пустой ответ от сервера")
@@ -485,7 +506,10 @@ fun ClientHomeScreen() {
 
                                 // Запускаем SSE сразу после создания заказа
                                 sseJob = coroutineScope.launch {
-                                    sseSubscribe(orderId, token) { json ->
+                                    sseClient.subscribe(orderId,
+                                        token.toString(),
+                                                        coroutineScope,
+                                                        onUpdate = { json ->
                                         Log.d(TAG, "SSE получил: $json")
                                         val status = json.optString("status", "")
                                         if (status.isNotEmpty()) {
@@ -495,13 +519,13 @@ fun ClientHomeScreen() {
                                                 "Assigned" -> "Водитель назначен"
                                                 "COMPLETED" -> {
                                                     "Поездка завершена"
-                                                    disconnectSse()
+                                                    sseClient.disconnect()
                                                     Log.d(TAG, "Заказ завершён — SSE закрыт")
                                                 }
 
                                                 "CANCELLED" -> {
                                                     "Заказ отменён"
-                                                    disconnectSse()
+                                                    sseClient.disconnect()
                                                     Log.d(TAG, "Заказ отменён — SSE закрыт")
                                                 }
 
@@ -517,7 +541,10 @@ fun ClientHomeScreen() {
                                             ?.let {
                                                 driverPhone = it
                                             }
-                                    }
+                                    },
+                                        onError = { e->
+                                            Log.e("SSE", "Ошибка", e)
+                                        })
                                 }
 
                                 Log.d(TAG, "Заказ успешно создан: $orderId")
@@ -534,7 +561,7 @@ fun ClientHomeScreen() {
                         .height(56.dp),
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    if (isOrderPlaced ) {
+                    if (isOrderPlaced) {
                         CircularProgressIndicator(
                             color = Color.White,
                             modifier = Modifier.size(24.dp)
@@ -556,77 +583,3 @@ fun ClientHomeScreen() {
         }
     }
 }
-
-private fun CoroutineScope.sseSubscribe(
-    orderId: String,
-    token: String,
-    onUpdate: (JSONObject) -> Unit
-) {
-    launch(Dispatchers.IO) execute@{
-        val client = OkHttpClient.Builder()
-            .readTimeout(0, TimeUnit.MILLISECONDS)  // бесконечно
-            .writeTimeout(0, TimeUnit.MILLISECONDS)
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .build()
-
-        val request = Request.Builder()
-            .url("$BASE_URL/api/sse/subscribe/$orderId")
-            .addHeader("Authorization", "Bearer $token")
-            .addHeader("Accept", "text/event-stream")
-            .addHeader("Cache-Control", "no-cache")
-            .build()
-
-        try {
-            val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                Log.e(TAG, "SSE: ошибка ${response.code}")
-                return@execute
-            }
-
-            val body = response.body ?: return@execute
-            val source = body.source()
-            var buffer = StringBuilder()
-
-            while (!source.exhausted()) {
-                val line = source.readUtf8Line() ?: break
-                Log.d("SSE_RAW", "Строка: $line")
-
-                buffer.append(line).append("\n")
-
-                if (line.isBlank()) {
-                    val eventData = buffer.toString()
-                    Log.d("SSE_EVENT", "Событие:\n$eventData")
-
-                    if (eventData.contains("data:")) {
-                        val jsonString = eventData.lines()
-                            .filter { it.startsWith("data:") }
-                            .joinToString("") { it.removePrefix("data:").trim() }
-
-                        if (jsonString.isNotEmpty()) {
-                            try {
-                                val json = JSONObject(jsonString)
-                                Log.d("SSE_JSON", "JSON: $json")
-                                withContext(Dispatchers.Main) {
-                                    onUpdate(json)
-                                }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Ошибка парсинга JSON: $jsonString", e)
-                            }
-                        }
-                    }
-                    buffer = StringBuilder() // очищаем буфер
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "SSE упало", e)
-        }
-    }
-}
-
-private fun disconnectSse() {
-    currentSseJob?.cancel()
-    currentSseJob = null
-    Log.d(TAG, "SSE соединение закрыто")
-}
-
-

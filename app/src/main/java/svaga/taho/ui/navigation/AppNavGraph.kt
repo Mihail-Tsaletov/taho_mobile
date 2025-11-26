@@ -1,6 +1,5 @@
 package svaga.taho.ui.navigation
 
-import DriverHomeScreen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -14,6 +13,7 @@ import svaga.taho.ui.auth.LoginScreen
 import svaga.taho.ui.auth.RegisterScreen
 import svaga.taho.ui.auth.RoleSelectionScreen
 import svaga.taho.ui.client.ClientHomeScreen
+import svaga.taho.ui.driver.DriverHomeScreen
 
 import javax.inject.Inject
 
