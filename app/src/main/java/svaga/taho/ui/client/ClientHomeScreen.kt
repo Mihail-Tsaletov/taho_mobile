@@ -1,6 +1,5 @@
 package svaga.taho.ui.client
 
-import android.R.attr.data
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -29,33 +28,17 @@ import com.yandex.mapkit.mapview.MapView
 import com.yandex.mapkit.search.*
 import com.yandex.mapkit.geometry.BoundingBox
 import com.yandex.runtime.Error
-import svaga.taho.R
 import java.text.SimpleDateFormat
 import java.util.*
 import android.util.Log
 import android.widget.Toast
 import androidx.hilt.navigation.compose.hiltViewModel
 import dagger.hilt.android.EntryPointAccessors
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.ResponseBody
-import org.json.JSONObject
-import svaga.taho.data.remote.ApiService
 import svaga.taho.data.remote.CreateOrderRequest
 import svaga.taho.di.AppModule
 import svaga.taho.ui.auth.AuthViewModel
-import svaga.taho.utils.ActiveOrderManager
-import java.io.IOException
-import java.util.concurrent.TimeUnit
 import kotlin.jvm.java
 
 private const val TAG = "ClientHomeScreen"
@@ -125,7 +108,7 @@ fun ClientHomeScreen() {
 
 // Загружаем активный заказ при запуске
     LaunchedEffect(Unit) {
-        activeOrderManager.loadActiveOrder()
+        activeOrderManager.loadActiveOrderForClient()
     }
 
     LaunchedEffect(activeOrder) {

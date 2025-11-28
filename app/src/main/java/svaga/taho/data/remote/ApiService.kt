@@ -35,6 +35,12 @@ interface ApiService {
         @Query("statuses") statuses: String = "PENDING,ACCEPTED,PICKED_UP"
     ): Response<List<ActiveOrderResponse>>
 
+    @GET("api/orders/getOrdersByDriverIdWithStatuses")
+    suspend fun getActiveOrdersForDriver(
+        @Header("Authorization") token: String,
+        @Query("statuses") statuses: String = "ASSIGNED,ACCEPTED,PICKED_UP"
+    ): Response<List<DriverOrder>>
+
     @POST("api/orders/{id}/accept")
     suspend fun acceptOrder(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
 
