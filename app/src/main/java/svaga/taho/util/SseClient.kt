@@ -13,15 +13,17 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "SseClient"
-private const val BASE_URL = "http://188.120.239.157:8081"
+private const val BASE_URL = BuildConfig.BASE_URL
 
 @Singleton
-class SseClient @Inject constructor() {
-    private val client = OkHttpClient.Builder()
+class SseClient @Inject constructor(
+    private val okHttpClient: OkHttpClient
+) {
+/*    private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .writeTimeout(0, TimeUnit.MILLISECONDS)
         .connectTimeout(10, TimeUnit.SECONDS)
-        .build()
+        .build()*/
 
     private var currentJob: Job? = null
 
@@ -32,23 +34,30 @@ class SseClient @Inject constructor() {
         onUpdate: (JSONObject) -> Unit,
         onError: (Throwable) -> Unit = {}
     ) {
+        Log.d(TAG, "Подписываемся на SSE: $orderId")
         // Отменяем предыдущее соединение
         currentJob?.cancel()
 
-        currentJob = scope.launch(Dispatchers.IO) {
-            val request = Request.Builder()
-                .url("$BASE_URL/api/sse/subscribe/$orderId")
-                .addHeader("Authorization", "Bearer $token")
-                .addHeader("Accept", "text/event-stream")
-                .addHeader("Cache-Control", "no-cache")
-                .build()
+        val url = if (orderId == "driver") {
+            "${BuildConfig.BASE_URL}api/sse/subscribe/driver"
+        } else {
+            "${BuildConfig.BASE_URL}api/sse/subscribe/$orderId"
+        }
 
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Accept", "text/event-stream")
+            .addHeader("Authorization", "Bearer $token")
+            .addHeader("Cache-Control", "no-cache")
+            .build()
+
+        currentJob = scope.launch(Dispatchers.IO) {
             try {
-                val response = client.newCall(request).execute()
+                val response = okHttpClient.newCall(request).execute()
+                Log.d(TAG, "SSE подключился: ${response.code}")
+
                 if (!response.isSuccessful) {
-                    withContext(Dispatchers.Main) {
-                        onError(Exception("HTTP ${response.code}"))
-                    }
+                    withContext(Dispatchers.Main) { onError(Exception("HTTP ${response.code}")) }
                     return@launch
                 }
 
@@ -97,19 +106,6 @@ class SseClient @Inject constructor() {
         currentJob?.cancel()
         currentJob = null
         Log.d(TAG, "SSE отключён")
-    }
-
-    fun subscribeAsDriver(
-        token: String,
-        scope: CoroutineScope,
-        onUpdate: (JSONObject) -> Unit
-    ) {
-        subscribe(
-            orderId = "driver", // → URL будет /api/sse/subscribe/driver
-            token = token,
-            scope = scope,
-            onUpdate = onUpdate
-        )
     }
 }
 

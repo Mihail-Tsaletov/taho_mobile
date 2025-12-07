@@ -27,7 +27,8 @@ interface ApiService {
     suspend fun subscribeDriverToNewOrders(): Response<ResponseBody>
 
     @POST("api/orders")
-    suspend fun createOrder(@Body request: CreateOrderRequest): Response<ResponseBody>
+    suspend fun createOrder(@Header("Authorization") token: String,
+                            @Body request: CreateOrderRequest): Response<ResponseBody>
 
     @GET("api/orders/getOrdersByUserIdWithStatuses")
     suspend fun getActiveOrders(

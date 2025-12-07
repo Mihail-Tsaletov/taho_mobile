@@ -5,8 +5,14 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,9 +30,13 @@ class TokenManager @Inject constructor(
         private val LAST_MODE_DRIVER = booleanPreferencesKey("last_mode_driver")
     }
 
-    val tokenFlow: Flow<String?> = dataStore.data.map { it[TOKEN_KEY] }
     val roleFlow: Flow<String?> = dataStore.data.map { it[ROLE_KEY] }
     val lastModeDriverFlow: Flow<Boolean> = dataStore.data.map { it[LAST_MODE_DRIVER] ?: false }
+
+    val tokenFlow: Flow<String> = dataStore.data
+        .map { it[TOKEN_KEY] ?: "" }
+    val currentTokenValue: String
+        get() = runBlocking { tokenFlow.first() }
 
     suspend fun saveAuth(token: String, role: String) {
         dataStore.edit {
@@ -36,9 +46,7 @@ class TokenManager @Inject constructor(
     }
 
     suspend fun saveToken(token: String) {
-        dataStore.edit { prefs ->
-            prefs[TOKEN_KEY] = token
-        }
+        dataStore.edit { it[TOKEN_KEY] = token }
     }
 
     suspend fun setLastModeDriver(isDriver: Boolean) {

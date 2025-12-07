@@ -42,7 +42,6 @@ import svaga.taho.ui.auth.AuthViewModel
 import kotlin.jvm.java
 
 private const val TAG = "ClientHomeScreen"
-private const val BASE_URL = "http://188.120.239.157:8081"
 private var currentSseJob by mutableStateOf<Job?>(null)
 var sseJob by mutableStateOf<Job?>(null)
 
@@ -80,12 +79,11 @@ fun ClientHomeScreen() {
     }
 
     // Получаем токен и ApiService
-    val tokenManager = remember {
-        EntryPointAccessors.fromApplication(context, AppModule.ApiProvider::class.java)
-            .tokenManager()
-    }
+    val token by EntryPointAccessors.fromApplication(
+        context.applicationContext,
+        AppModule.ApiProvider::class.java
+    ).tokenManager().tokenFlow.collectAsState(initial = "")
     val authViewModel: AuthViewModel = hiltViewModel()
-    val token by authViewModel.currentToken.collectAsState(initial = "")
 
     val apiService = remember {
         EntryPointAccessors.fromApplication(context, AppModule.ApiProvider::class.java).apiService()
@@ -480,7 +478,8 @@ fun ClientHomeScreen() {
                                 ).apiService()
 
                                 // Отправляем с заголовком Authorization
-                                val response = api.createOrder(request)
+                                Log.d(TAG, "Заголовок: Bearer $token")
+                                val response = api.createOrder("Bearer $token",request)
 
                                 val orderId = response.body()?.string()?.trim('"')
                                     ?: throw Exception("Пустой ответ от сервера")

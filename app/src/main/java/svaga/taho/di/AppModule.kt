@@ -16,11 +16,13 @@ import retrofit2.converter.gson.GsonConverterFactory
 import svaga.taho.TahoApplication
 import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.ApiService
+import svaga.taho.util.BuildConfig
 import svaga.taho.util.SseClient
 import svaga.taho.utils.ActiveOrderManager
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
+private const val BASE_URL = BuildConfig.BASE_URL
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
@@ -29,7 +31,7 @@ object AppModule {
     @Singleton
     fun provideApi(okHttpClient: OkHttpClient): ApiService {
         return Retrofit.Builder()
-            .baseUrl("http://188.120.239.157:8081/")
+            .baseUrl(BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
@@ -54,14 +56,21 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient {
+    fun provideOkHttpClient(): OkHttpClient {
         return OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
-            .addInterceptor(authInterceptor) // токен
-            .addInterceptor(HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.HEADERS
-            })
+            .addInterceptor(
+                HttpLoggingInterceptor { Log.d("OKHTTP", it) }.apply {
+                    level = HttpLoggingInterceptor.Level.HEADERS
+                }
+            )
             .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideSseClient(okHttpClient: OkHttpClient): SseClient {
+        return SseClient(okHttpClient)
     }
 }
