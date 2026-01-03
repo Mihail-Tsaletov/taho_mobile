@@ -113,6 +113,7 @@ fun ClientHomeScreen() {
         activeOrder?.let { order ->
             Log.d(TAG, "Активный заказ загружен: ${order.id}")
             showOrderDetails = false
+            isOrderPlaced = false
 
             fromAddress = order.startAddress
             toAddress = order.endAddress
@@ -122,6 +123,14 @@ fun ClientHomeScreen() {
                 "ARRIVED" -> "Водитель на месте"
                 "IN_PROGRESS" -> "В пути"
                 "COMPLETED", "CANCELLED" -> {
+                    currentStatus = if (order.status == "COMPLETED") "Поездка завершена" else "Заказ отменён"
+                    showOrderDetails = false
+                    isOrderPlaced = false
+                    fromAddress = "Откуда"
+                    toAddress = "Куда едем?"
+                    orderTime = ""
+                    driverName = null
+                    driverPhone = null
                     activeOrderManager.clear()
                     return@LaunchedEffect
                 }
@@ -146,19 +155,21 @@ fun ClientHomeScreen() {
                                 "ACCEPTED", "PICKED_UP" -> "Заказ принят"
                                 "ARRIVED" -> "Водитель на месте"
                                 "IN_PROGRESS" -> "В пути"
-                                "COMPLETED" -> {
-                                    "Поездка завершена"
-                                    activeOrderManager.clear()
-                                    showOrderDetails = false
-                                    sseClient.disconnect()
-                                }
+                                "COMPLETED", "CANCELLED" -> {
+                                    currentStatus = if (status == "COMPLETED") "Поездка завершена" else "Заказ отменён"
 
-                                "CANCELLED" -> {
-                                    "Заказ отменён"
-                                    activeOrderManager.clear()
+                                    // ← СБРАСЫВАЕМ ВСЁ!
                                     showOrderDetails = false
+                                    isOrderPlaced = false
+                                    fromAddress = "Откуда"
+                                    toAddress = "Куда едем?"
+                                    orderTime = ""
+                                    driverName = null
+                                    driverPhone = null
+
+                                    activeOrderManager.clear()
                                     sseClient.disconnect()
-                                    Log.d(TAG, "Заказ отменён — SSE закрыт")
+                                    Log.d(TAG, "Заказ завершён/отменён — всё очищено")
                                 }
 
                                 else -> currentStatus
@@ -227,7 +238,7 @@ fun ClientHomeScreen() {
 
     DisposableEffect(Unit) {
         MapKitFactory.initialize(context)
-        onDispose { sseClient.disconnect() }
+        onDispose { /*sseClient.disconnect() */}
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -501,12 +512,16 @@ fun ClientHomeScreen() {
                                                 "Assigned" -> "Водитель назначен"
                                                 "COMPLETED" -> {
                                                     "Поездка завершена"
+                                                    activeOrderManager.clear()
+                                                    showOrderDetails = false
                                                     sseClient.disconnect()
                                                     Log.d(TAG, "Заказ завершён — SSE закрыт")
                                                 }
 
                                                 "CANCELLED" -> {
                                                     "Заказ отменён"
+                                                    activeOrderManager.clear()
+                                                    showOrderDetails = false
                                                     sseClient.disconnect()
                                                     Log.d(TAG, "Заказ отменён — SSE закрыт")
                                                 }

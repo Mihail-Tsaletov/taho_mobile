@@ -302,11 +302,11 @@ fun DriverHomeScreen() {
 
     DisposableEffect(Unit) {
         onDispose {
-            newOrdersSseJob?.cancel()
+/*            newOrdersSseJob?.cancel()
             orderUpdatesSseJob?.cancel()
             sseJob?.cancel()
             sseJob = null
-            Log.d(TAG, "Экран закрыт — SSE отключён")
+            Log.d(TAG, "Экран закрыт — SSE отключён")*/
             MapKitFactory.getInstance().onStop()
         }
     }
@@ -345,4 +345,6 @@ private fun buildRoute(
 ) {
     onReady(listOf(from, to))
 }
+
+
 
