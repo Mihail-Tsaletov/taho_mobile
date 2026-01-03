@@ -59,7 +59,7 @@ object AppModule {
     fun provideOkHttpClient(): OkHttpClient {
         return OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(0, TimeUnit.SECONDS)
             .addInterceptor(
                 HttpLoggingInterceptor { Log.d("OKHTTP", it) }.apply {
                     level = HttpLoggingInterceptor.Level.HEADERS
