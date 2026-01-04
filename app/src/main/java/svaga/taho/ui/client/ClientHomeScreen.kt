@@ -1,5 +1,6 @@
 package svaga.taho.ui.client
 
+import android.R
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -39,6 +40,7 @@ import androidx.navigation.NavController
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.CreateOrderRequest
 import svaga.taho.di.AppModule
 import svaga.taho.ui.auth.AuthViewModel
@@ -94,6 +96,12 @@ fun ClientHomeScreen(navController: NavController) {
         AppModule.ApiProvider::class.java
     ).tokenManager().tokenFlow.collectAsState(initial = "")
     val authViewModel: AuthViewModel = hiltViewModel()
+
+    val tokenManager: TokenManager = hiltViewModel<AuthViewModel>().tokenManager
+
+// Реактивно получаем данные
+    val userName by tokenManager.nameFlow.collectAsState(initial = "Загрузка...")
+    val userPhone by tokenManager.phoneFlow.collectAsState(initial = "Загрузка...")
 
     val apiService = remember {
         EntryPointAccessors.fromApplication(context, AppModule.ApiProvider::class.java).apiService()
@@ -242,15 +250,19 @@ fun ClientHomeScreen(navController: NavController) {
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = false,
         drawerContent = {
             AppDrawerContent(
                 navController = navController,
                 authViewModel = authViewModel,
-                name = "name",
-                phone = "phone",
+                name = userName ?: "Имя не указано",
+                phone = userPhone ?: "Телефон не указан",
                 onCloseDrawer = { scope.launch { drawerState.close() } }
             )
-        }
+        },
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF8FAFC))
     ) {
         Scaffold(
             topBar = {

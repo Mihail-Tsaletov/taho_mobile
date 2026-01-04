@@ -79,7 +79,7 @@ class AuthViewModel @Inject constructor(
                     phone = profile.phone)
                 ///// ************************
                 _currentToken.value = response.token
-
+                Log.d(TAG, "PROFILE NAME EBYCHI SLUCHAS: $profile.name")
                 when (roleFromToken) {
                     "CLIENT" -> _event.emit(AuthEvent.ToClientHome)
                     "DRIVER" -> _event.emit(AuthEvent.ToRoleSelection)

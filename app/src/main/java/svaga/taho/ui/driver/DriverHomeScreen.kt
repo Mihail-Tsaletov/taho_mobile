@@ -36,6 +36,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import svaga.taho.R
+import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.DriverOrder
 import svaga.taho.di.AppModule
 import svaga.taho.ui.auth.AuthViewModel
@@ -82,6 +83,11 @@ fun DriverHomeScreen(navController: NavController) {
         context.applicationContext,
         AppModule.ApiProvider::class.java
     ).tokenManager().tokenFlow.collectAsState(initial = "")
+
+    val tokenManager: TokenManager = hiltViewModel<AuthViewModel>().tokenManager
+    // Реактивно получаем данные
+    val userName by tokenManager.nameFlow.collectAsState(initial = "Загрузка...")
+    val userPhone by tokenManager.phoneFlow.collectAsState(initial = "Загрузка...")
 
 
     val apiService = remember {
@@ -254,8 +260,8 @@ fun DriverHomeScreen(navController: NavController) {
             AppDrawerContent(
                 navController = navController,
                 authViewModel = authViewModel,
-                name = "name",
-                phone = "phone",
+                name = userName ?: "Имя не указано",
+                phone = userPhone ?: "Номера нема",
                 onCloseDrawer = { scope.launch { drawerState.close() } }
             )
         }
