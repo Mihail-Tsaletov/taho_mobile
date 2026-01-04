@@ -357,6 +357,9 @@ fun ClientHomeScreen(navController: NavController) {
                                                         currentStatus.contains("Водитель назначен") -> Color(
                                                             0xFFFFA000
                                                         )
+                                                        currentStatus.contains("В пути") -> Color(
+                                                            0xFF03A9F4
+                                                        )
 
                                                         currentStatus.contains("Поездка завершена") -> Color.Gray
                                                         else -> Color.Yellow
@@ -551,9 +554,12 @@ fun ClientHomeScreen(navController: NavController) {
                                                             currentStatus = when (status) {
                                                                 "ACCEPTED", "PICKED_UP" -> "Заказ принят"
                                                                 "ARRIVED" -> "Водитель на месте"
-                                                                "Assigned" -> "Водитель назначен"
+                                                                "ASSIGNED" -> "Водитель назначен"
+                                                                "IN_PROGRESS" -> "В пути"
                                                                 "COMPLETED" -> {
                                                                     "Поездка завершена"
+                                                                    activeOrderManager.clear()
+                                                                    showOrderDetails = false
                                                                     sseClient.disconnect()
                                                                     Log.d(
                                                                         TAG,

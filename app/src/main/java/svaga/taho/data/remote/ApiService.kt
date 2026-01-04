@@ -33,13 +33,13 @@ interface ApiService {
     @GET("api/orders/getOrdersByUserIdWithStatuses")
     suspend fun getActiveOrders(
         @Header("Authorization") token: String,
-        @Query("statuses") statuses: String = "PENDING,ACCEPTED,PICKED_UP"
+        @Query("statuses") statuses: String = "PENDING,ACCEPTED,IN_PROGRESS"
     ): Response<List<ActiveOrderResponse>>
 
     @GET("api/orders/getOrdersByDriverIdWithStatuses")
     suspend fun getActiveOrdersForDriver(
         @Header("Authorization") token: String,
-        @Query("statuses") statuses: String = "ASSIGNED,ACCEPTED,PICKED_UP"
+        @Query("statuses") statuses: String = "ASSIGNED,ACCEPTED,IN_PROGRESS"
     ): Response<List<DriverOrder>>
 
     @POST("api/orders/{id}/accept")
@@ -47,6 +47,12 @@ interface ApiService {
 
     @POST("api/orders/{id}/arrived")
     suspend fun driverArrived(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
+
+    @POST("api/orders/{id}/complete")
+    suspend fun driverComplete(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
+
+    @POST("api/orders/{id}/pickedUp")
+    suspend fun driverPickedUp(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
 
     @GET("api/users/getUser")
     suspend fun getUserProfile(
