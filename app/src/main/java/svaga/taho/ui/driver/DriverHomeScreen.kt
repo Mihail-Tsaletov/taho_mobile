@@ -8,6 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,6 +20,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
 import com.yandex.mapkit.MapKitFactory
 import com.yandex.mapkit.geometry.Point
 import com.yandex.mapkit.geometry.Polyline
@@ -32,9 +36,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import svaga.taho.R
+import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.DriverOrder
 import svaga.taho.di.AppModule
+import svaga.taho.ui.auth.AuthViewModel
 import svaga.taho.ui.client.sseJob
+import svaga.taho.ui.menu.AppDrawerContent
 import svaga.taho.util.SseClient
 import svaga.taho.util.playNotificationSound
 import java.util.*
@@ -42,16 +49,25 @@ import java.util.*
 private const val TAG = "DriverHomeScreen"
 var sseJob by mutableStateOf<Job?>(null)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DriverHomeScreen() {
+fun DriverHomeScreen(navController: NavController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    //Для работы Drawer
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val authViewModel: AuthViewModel = hiltViewModel()
+
 
     // СОСТОЯНИЯ
     var currentOrder by remember { mutableStateOf<DriverOrder?>(null) }
     var routePolyline by remember { mutableStateOf<PolylineMapObject?>(null) }
     var driverMarker by remember { mutableStateOf<PlacemarkMapObject?>(null) }
     var mapObjects by remember { mutableStateOf<MapObjectCollection?>(null) }
+    var isArrived by remember { mutableStateOf(false) }
+    var isPickedUp by remember { mutableStateOf(false) }
+
 
     var newOrdersSseJob by remember { mutableStateOf<Job?>(null) }
     var orderUpdatesSseJob by remember { mutableStateOf<Job?>(null) }
@@ -67,6 +83,11 @@ fun DriverHomeScreen() {
         context.applicationContext,
         AppModule.ApiProvider::class.java
     ).tokenManager().tokenFlow.collectAsState(initial = "")
+
+    val tokenManager: TokenManager = hiltViewModel<AuthViewModel>().tokenManager
+    // Реактивно получаем данные
+    val userName by tokenManager.nameFlow.collectAsState(initial = "Загрузка...")
+    val userPhone by tokenManager.phoneFlow.collectAsState(initial = "Загрузка...")
 
 
     val apiService = remember {
@@ -103,7 +124,13 @@ fun DriverHomeScreen() {
                         Log.d(TAG, "Новый заказ прилетел: $json")
 
                         // Если уже есть активный заказ — игнорируем новый
-                        if (currentOrder?.status in listOf("ACCEPTED", "PICKED_UP", "ARRIVED", "IN_PROGRESS")) {
+                        if (currentOrder?.status in listOf(
+                                "ACCEPTED",
+                                "PICKED_UP",
+                                "ARRIVED",
+                                "IN_PROGRESS"
+                            )
+                        ) {
                             return@subscribe
                         }
 
@@ -184,7 +211,13 @@ fun DriverHomeScreen() {
                                                     Log.d(TAG, "Новый заказ прилетел: $json")
 
                                                     // Если уже есть активный заказ — игнорируем новый
-                                                    if (currentOrder?.status in listOf("ACCEPTED", "PICKED_UP", "ARRIVED", "IN_PROGRESS")) {
+                                                    if (currentOrder?.status in listOf(
+                                                            "ACCEPTED",
+                                                            "PICKED_UP",
+                                                            "ARRIVED",
+                                                            "IN_PROGRESS"
+                                                        )
+                                                    ) {
                                                         return@subscribe
                                                     }
 
@@ -220,79 +253,204 @@ fun DriverHomeScreen() {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        AndroidView(
-            factory = { ctx ->
-                MapView(ctx).apply {
-                    mapWindow.map.move(CameraPosition(Point(55.7558, 37.6173), 12f, 0f, 0f))
-                    mapObjects = mapWindow.map.mapObjects
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-            update = { view ->
-                view.onStart()
-                MapKitFactory.getInstance().onStart()
-            }
-        )
 
-        // ОДНО ОКНО — В ЗАВИСИМОСТИ ОТ СТАТУСА
-        currentOrder?.let { order ->
-            Card(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (order.status == "ASSIGNED") Color(0xFFE91E63) else Color.White
-                ),
-                elevation = CardDefaults.cardElevation(12.dp)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    if (order.status == "ASSIGNED") {
-                        // ← НОВЫЙ ЗАКАЗ
-                        Text("Новый заказ!", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(12.dp))
-                        Text("Откуда: ${order.startAddress}", color = Color.White)
-                        Text("Куда: ${order.endAddress}", color = Color.White)
-                        Text("Цена: ${order.price} ₽", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-
-                        Spacer(Modifier.height(20.dp))
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Button(
-                                onClick = acceptOrder,
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Принять", color = Color(0xFFE91E63))
-                            }
-                            OutlinedButton(
-                                onClick = { currentOrder = null },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Отклонить", color = Color.White)
-                            }
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            AppDrawerContent(
+                navController = navController,
+                authViewModel = authViewModel,
+                name = userName ?: "Имя не указано",
+                phone = userPhone ?: "Номера нема",
+                onCloseDrawer = { scope.launch { drawerState.close() } }
+            )
+        }
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Taho Driver") },
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Default.Menu, contentDescription = "Menu")
                         }
-                    } else {
-                        // ← АКТИВНЫЙ ЗАКАЗ
-                        Text("Заказ принят", color = Color.Green, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(12.dp))
-                        Text("Пассажир: ${order.passengerName}")
-                        Text(
-                            "Телефон: ${order.passengerPhone}",
-                            color = Color.Blue,
-                            modifier = Modifier.clickable {
-                                context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${order.passengerPhone}")))
-                            }
-                        )
-                        Text("Откуда: ${order.startAddress}")
-                        Text("Куда: ${order.endAddress}")
+                    }
+                )
+            }
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                AndroidView(
+                    factory = { ctx ->
+                        MapView(ctx).apply {
+                            mapWindow.map.move(CameraPosition(Point(55.7558, 37.6173), 12f, 0f, 0f))
+                            mapObjects = mapWindow.map.mapObjects
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    update = { view ->
+                        view.onStart()
+                        MapKitFactory.getInstance().onStart()
+                    }
+                )
 
-                        Spacer(Modifier.height(16.dp))
-                        Button(onClick = {
-                            scope.launch { apiService.driverArrived("Bearer $token", order.id) }
-                        }) {
-                            Text("Я на месте")
+                // ОДНО ОКНО — В ЗАВИСИМОСТИ ОТ СТАТУСА
+                currentOrder?.let { order ->
+                    Card(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (order.status == "ASSIGNED") Color(0xFFE91E63) else Color.White
+                        ),
+                        elevation = CardDefaults.cardElevation(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            if (order.status == "ASSIGNED") {
+                                // ← НОВЫЙ ЗАКАЗ
+                                Text(
+                                    "Новый заказ!",
+                                    color = Color.White,
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Text("Откуда: ${order.startAddress}", color = Color.White)
+                                Text("Куда: ${order.endAddress}", color = Color.White)
+                                Text(
+                                    "Цена: ${order.price} ₽",
+                                    color = Color.White,
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Spacer(Modifier.height(20.dp))
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    Button(
+                                        onClick = acceptOrder,
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Принять", color = Color(0xFFE91E63))
+                                    }
+                                    OutlinedButton(
+                                        onClick = { currentOrder = null },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Отклонить", color = Color.White)
+                                    }
+                                }
+                            } else {
+                                // ← АКТИВНЫЙ ЗАКАЗ
+                                Text(
+                                    "Заказ принят",
+                                    color = Color.Green,
+                                    fontSize = 22.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Text("Пассажир: ${order.passengerName}")
+                                Text(
+                                    "Телефон: ${order.passengerPhone}",
+                                    color = Color.Blue,
+                                    modifier = Modifier.clickable {
+                                        context.startActivity(
+                                            Intent(
+                                                Intent.ACTION_DIAL,
+                                                Uri.parse("tel:${order.passengerPhone}")
+                                            )
+                                        )
+                                    }
+                                )
+                                Text("Откуда: ${order.startAddress}")
+                                Text("Куда: ${order.endAddress}")
+
+                                Spacer(Modifier.height(16.dp))
+
+                                when {
+                                    isPickedUp -> {
+                                        Button(
+                                            onClick = {
+                                                scope.launch {
+                                                    try {
+                                                        apiService.driverComplete(
+                                                            "Bearer $token",
+                                                            order.id
+                                                        )
+                                                        // Можно сбросить состояние или ждать COMPLETED от SSE
+                                                    } catch (e: Exception) {
+                                                        Log.e(TAG, "Ошибка завершения заказа", e)
+                                                    }
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color(
+                                                    0xFFE91E63
+                                                )
+                                            )
+                                        ) {
+                                            Text(
+                                                "Завершить заказ",
+                                                color = Color.White,
+                                                fontSize = 18.sp
+                                            )
+                                        }
+                                    }
+
+                                    isArrived -> {
+                                        Button(
+                                            onClick = {
+                                                scope.launch {
+                                                    try {
+                                                        apiService.driverPickedUp(
+                                                            "Bearer $token",
+                                                            order.id
+                                                        )
+                                                        isPickedUp = true
+                                                    } catch (e: Exception) {
+                                                        Log.e(TAG, "Ошибка забора пассажира", e)
+                                                    }
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color(
+                                                    0xFFFF9800
+                                                )
+                                            )
+                                        ) {
+                                            Text("Забрал пассажира")
+                                        }
+                                    }
+
+                                    else -> {
+                                        Button(
+                                            onClick = {
+                                                scope.launch {
+                                                    try {
+                                                        apiService.driverArrived(
+                                                            "Bearer $token",
+                                                            order.id
+                                                        )
+                                                        isArrived = true
+                                                    } catch (e: Exception) {
+                                                        Log.e(TAG, "Ошибка прибытия", e)
+                                                    }
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text("Я на месте")
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -302,11 +460,11 @@ fun DriverHomeScreen() {
 
     DisposableEffect(Unit) {
         onDispose {
-/*            newOrdersSseJob?.cancel()
+            newOrdersSseJob?.cancel()
             orderUpdatesSseJob?.cancel()
             sseJob?.cancel()
             sseJob = null
-            Log.d(TAG, "Экран закрыт — SSE отключён")*/
+            Log.d(TAG, "Экран закрыт — SSE отключён")
             MapKitFactory.getInstance().onStop()
         }
     }
@@ -345,6 +503,3 @@ private fun buildRoute(
 ) {
     onReady(listOf(from, to))
 }
-
-
-

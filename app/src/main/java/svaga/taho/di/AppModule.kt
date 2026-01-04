@@ -60,6 +60,7 @@ object AppModule {
         return OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(0, TimeUnit.SECONDS)
+            .pingInterval(10, TimeUnit.SECONDS)
             .addInterceptor(
                 HttpLoggingInterceptor { Log.d("OKHTTP", it) }.apply {
                     level = HttpLoggingInterceptor.Level.HEADERS
