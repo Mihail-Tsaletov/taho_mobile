@@ -17,6 +17,7 @@ import svaga.taho.data.remote.RegisterRequest
 import svaga.taho.util.parseJwtRole
 import javax.inject.Inject
 
+
 private const val TAG = "AuthViewModel"
 
 @HiltViewModel
@@ -70,7 +71,13 @@ class AuthViewModel @Inject constructor(
                 val roleFromToken = parseJwtRole(response.token)
                     ?: throw IllegalStateException("Не удалось определить роль из токена")
 
-                tokenManager.saveAuth(response.token, roleFromToken)
+                // Че то хуйню набезорбазил, надо будет поменять ******************
+                val token = response.token
+                val profile = api.getUserProfile("Bearer $token")
+
+                tokenManager.saveAuth(response.token, roleFromToken, profile.name,
+                    phone = profile.phone)
+                ///// ************************
                 _currentToken.value = response.token
 
                 when (roleFromToken) {

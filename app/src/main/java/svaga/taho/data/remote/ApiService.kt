@@ -48,6 +48,10 @@ interface ApiService {
     @POST("api/orders/{id}/arrived")
     suspend fun driverArrived(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
 
+    @GET("api/users/getUser")
+    suspend fun getUserProfile(
+        @Header("Authorization") token: String
+    ): UserProfileResponse
 }
 
 data class CreateOrderRequest(
@@ -71,4 +75,9 @@ data class LoginRequest(
 
 data class LoginResponse(
     val token: String
+)
+
+data class UserProfileResponse(
+    val name: String,
+    val phone: String,
 )

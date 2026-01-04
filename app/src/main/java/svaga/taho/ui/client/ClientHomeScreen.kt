@@ -60,6 +60,7 @@ fun ClientHomeScreen(navController: NavController) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
+
     // Состояние UI
     var fromAddress by remember { mutableStateOf("Откуда") }
     var toAddress by remember { mutableStateOf("Куда едем?") }

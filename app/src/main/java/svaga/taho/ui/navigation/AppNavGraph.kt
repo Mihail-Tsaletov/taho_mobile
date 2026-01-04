@@ -38,6 +38,6 @@ fun AppNavGraph(navController: NavHostController) {
         composable(Screen.Register.route) { RegisterScreen(navController) }
         composable(Screen.RoleSelection.route) { RoleSelectionScreen(navController) }
         composable(Screen.ClientHome.route) { ClientHomeScreen(navController) }
-        composable(Screen.DriverHome.route) { DriverHomeScreen() }
+        composable(Screen.DriverHome.route) { DriverHomeScreen(navController) }
     }
 }
