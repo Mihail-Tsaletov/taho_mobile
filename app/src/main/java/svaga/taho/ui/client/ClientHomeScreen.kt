@@ -160,27 +160,34 @@ fun ClientHomeScreen(navController: NavController) {
                         Log.d(TAG, "SSE получил: $json")
                         val status = json.optString("status", "")
                         if (status.isNotEmpty()) {
-                            currentStatus = when (status) {
-                                "ACCEPTED", "PICKED_UP" -> "Заказ принят"
-                                "ARRIVED" -> "Водитель на месте"
-                                "IN_PROGRESS" -> "В пути"
-                                "COMPLETED" -> {
-                                    "Поездка завершена"
-                                    activeOrderManager.clear()
-                                    showOrderDetails = false
-                                    sseClient.disconnect()
-                                }
+                            when (status) {
+                                "COMPLETED", "CANCELLED" -> {
+                                    // ← ПРАВИЛЬНО ПРИСВАИВАЕМ!
+                                    currentStatus = if (status == "COMPLETED") "Поездка завершена" else "Заказ отменён"
 
-                                "CANCELLED" -> {
-                                    "Заказ отменён"
-                                    activeOrderManager.clear()
+                                    // ← СБРАСЫВАЕМ ВСЁ!
                                     showOrderDetails = false
-                                    sseClient.disconnect()
-                                    Log.d(TAG, "Заказ отменён — SSE закрыт")
-                                }
+                                    isOrderPlaced = false
+                                    fromAddress = "Откуда"
+                                    toAddress = "Куда едем?"
+                                    orderTime = ""
+                                    driverName = null
+                                    driverPhone = null
 
-                                else -> currentStatus
-                            }.toString()
+                                    activeOrderManager.clear()
+                                    sseClient.disconnect()
+                                    Log.d(TAG, "Заказ завершён — всё очищено")
+                                }
+                                else -> {
+                                    currentStatus = when (status) {
+                                        "ACCEPTED", "PICKED_UP" -> "Заказ принят"
+                                        "ARRIVED" -> "Водитель на месте"
+                                        "IN_PROGRESS" -> "В пути"
+                                        "ASSIGNED" -> "Водитель назначен"
+                                        else -> "Статус: $status"
+                                    }
+                                }
+                            }
                         }
 
                         json.optString("driverName").takeIf { it.isNotBlank() }
@@ -563,33 +570,34 @@ fun ClientHomeScreen(navController: NavController) {
                                                         Log.d(TAG, "SSE получил: $json")
                                                         val status = json.optString("status", "")
                                                         if (status.isNotEmpty()) {
-                                                            currentStatus = when (status) {
-                                                                "ACCEPTED", "PICKED_UP" -> "Заказ принят"
-                                                                "ARRIVED" -> "Водитель на месте"
-                                                                "ASSIGNED" -> "Водитель назначен"
-                                                                "IN_PROGRESS" -> "В пути"
-                                                                "COMPLETED" -> {
-                                                                    "Поездка завершена"
-                                                                    activeOrderManager.clear()
+                                                            when (status) {
+                                                                "COMPLETED", "CANCELLED" -> {
+                                                                    // ← ПРАВИЛЬНО ПРИСВАИВАЕМ!
+                                                                    currentStatus = if (status == "COMPLETED") "Поездка завершена" else "Заказ отменён"
+
+                                                                    // ← СБРАСЫВАЕМ ВСЁ!
                                                                     showOrderDetails = false
-                                                                    sseClient.disconnect()
-                                                                    Log.d(
-                                                                        TAG,
-                                                                        "Заказ завершён — SSE закрыт"
-                                                                    )
-                                                                }
+                                                                    isOrderPlaced = false
+                                                                    fromAddress = "Откуда"
+                                                                    toAddress = "Куда едем?"
+                                                                    orderTime = ""
+                                                                    driverName = null
+                                                                    driverPhone = null
 
-                                                                "CANCELLED" -> {
-                                                                    "Заказ отменён"
+                                                                    activeOrderManager.clear()
                                                                     sseClient.disconnect()
-                                                                    Log.d(
-                                                                        TAG,
-                                                                        "Заказ отменён — SSE закрыт"
-                                                                    )
+                                                                    Log.d(TAG, "Заказ завершён — всё очищено")
                                                                 }
-
-                                                                else -> "Статус: $status"
-                                                            }.toString()
+                                                                else -> {
+                                                                    currentStatus = when (status) {
+                                                                        "ACCEPTED", "PICKED_UP" -> "Заказ принят"
+                                                                        "ARRIVED" -> "Водитель на месте"
+                                                                        "IN_PROGRESS" -> "В пути"
+                                                                        "ASSIGNED" -> "Водитель назначен"
+                                                                        else -> "Статус: $status"
+                                                                    }
+                                                                }
+                                                            }
                                                         }
                                                         json.optString("driverName")
                                                             .takeIf { it.isNotBlank() }
