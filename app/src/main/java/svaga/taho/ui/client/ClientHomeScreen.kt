@@ -12,7 +12,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -33,8 +32,12 @@ import java.text.SimpleDateFormat
 import java.util.*
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.ui.Alignment
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import dagger.hilt.android.EntryPointAccessors
@@ -45,6 +48,7 @@ import svaga.taho.data.remote.CreateOrderRequest
 import svaga.taho.di.AppModule
 import svaga.taho.ui.auth.AuthViewModel
 import svaga.taho.ui.menu.AppDrawerContent
+import svaga.taho.util.getCurrentLocation
 import kotlin.jvm.java
 
 private const val TAG = "ClientHomeScreen"
@@ -61,7 +65,6 @@ fun ClientHomeScreen(navController: NavController) {
     // Значения для работы с Driwer
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-
 
     // Состояние UI
     var fromAddress by remember { mutableStateOf("Откуда") }
@@ -163,7 +166,8 @@ fun ClientHomeScreen(navController: NavController) {
                             when (status) {
                                 "COMPLETED", "CANCELLED" -> {
                                     // ← ПРАВИЛЬНО ПРИСВАИВАЕМ!
-                                    currentStatus = if (status == "COMPLETED") "Поездка завершена" else "Заказ отменён"
+                                    currentStatus =
+                                        if (status == "COMPLETED") "Поездка завершена" else "Заказ отменён"
 
                                     // ← СБРАСЫВАЕМ ВСЁ!
                                     showOrderDetails = false
@@ -178,6 +182,7 @@ fun ClientHomeScreen(navController: NavController) {
                                     sseClient.disconnect()
                                     Log.d(TAG, "Заказ завершён — всё очищено")
                                 }
+
                                 else -> {
                                     currentStatus = when (status) {
                                         "ACCEPTED", "PICKED_UP" -> "Заказ принят"
@@ -283,69 +288,111 @@ fun ClientHomeScreen(navController: NavController) {
                 )
             }
         ) { paddingValues ->
-            // Здесь просто вставь свой существующий Box целиком, с модификатором padding
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)  // Только добавь это, чтобы учесть TopAppBar
+                modifier = Modifier.fillMaxSize()
+                    .padding(paddingValues)
             ) {
-
-                Box(modifier = Modifier.fillMaxSize()) {
-                    // Карта — грузится сразу и постоянно
-                    AndroidView(
-                        factory = { ctx ->
-                            MapView(ctx).apply {
-                                mapWindow.map.move(
-                                    CameraPosition(
-                                        Point(
-                                            55.7558,
-                                            37.6173
-                                        ), 10f, 0f, 0f
-                                    )
+                // Карта — грузится сразу и постоянно
+                AndroidView(
+                    factory = { ctx ->
+                        MapView(ctx).apply {
+                            mapWindow.map.move(
+                                CameraPosition(
+                                    Point(
+                                        55.7558,
+                                        37.6173
+                                    ), 10f, 0f, 0f
                                 )
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                        update = { view -> view.onStart(); MapKitFactory.getInstance().onStart() }
-                    )
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    update = { view -> view.onStart(); MapKitFactory.getInstance().onStart() }
+                )
 
-                    if (activeOrder != null && !showOrderDetails) {
-                        Card(
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .fillMaxWidth()
-                                .padding(16.dp)
-                                .clickable {
-                                    showOrderDetails = true  // открываем нижнюю карточку
-                                },
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E88E5)),
-                            elevation = CardDefaults.cardElevation(8.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
+                if (activeOrder != null && !showOrderDetails) {
+                    Card(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                            .clickable {
+                                showOrderDetails = true  // открываем нижнюю карточку
+                            },
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E88E5)),
+                        elevation = CardDefaults.cardElevation(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                "Активный заказ",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text("От: $fromAddress", color = Color.White.copy(alpha = 0.9f))
+                            Text("До: $toAddress", color = Color.White.copy(alpha = 0.9f))
+                            Text("Статус: $currentStatus", color = Color.White)
+                            driverName?.let {
                                 Text(
-                                    "Активный заказ",
+                                    "Водитель: $it",
                                     color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 18.sp
+                                    fontWeight = FontWeight.Medium
                                 )
-                                Spacer(Modifier.height(8.dp))
-                                Text("От: $fromAddress", color = Color.White.copy(alpha = 0.9f))
-                                Text("До: $toAddress", color = Color.White.copy(alpha = 0.9f))
-                                Text("Статус: $currentStatus", color = Color.White)
-                                driverName?.let {
-                                    Text(
-                                        "Водитель: $it",
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
                             }
                         }
                     }
+                }
+
+                // TODO Вот в этот Column  я запихнул все дальше, если будет вьеб по карточкам
+                //  удалить все что что следующего ТУДУ и убрать снизу скобку
+
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(Color.Transparent)
+                ) {
+                    // Кнопка GPS — сверху справа
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)  // место только для кнопки
+                    ) {
+                        FloatingActionButton(
+                            onClick = {
+                                getCurrentLocation(
+                                    context = context,
+                                    onSuccess = { point, address ->
+                                        fromPoint = point
+                                        fromAddress = address
+                                        fromInput = address
+                                        Toast.makeText(context, "Локация: $address", Toast.LENGTH_SHORT).show()
+                                    },
+                                    onError = { error ->
+                                        Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                                    }
+                                )
+                            },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(56.dp),
+                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
+                            contentColor = Color.White,
+                            elevation = FloatingActionButtonDefaults.elevation(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.LocationOn,
+                                contentDescription = "Моя локация"
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))  // зазор между кнопкой GPS и первым полем
 
                     Column(
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
+
                             .fillMaxWidth()
                             .background(Color.White)
                             .padding(16.dp)
@@ -376,6 +423,7 @@ fun ClientHomeScreen(navController: NavController) {
                                                         currentStatus.contains("Водитель назначен") -> Color(
                                                             0xFFFFA000
                                                         )
+
                                                         currentStatus.contains("В пути") -> Color(
                                                             0xFF03A9F4
                                                         )
@@ -573,7 +621,8 @@ fun ClientHomeScreen(navController: NavController) {
                                                             when (status) {
                                                                 "COMPLETED", "CANCELLED" -> {
                                                                     // ← ПРАВИЛЬНО ПРИСВАИВАЕМ!
-                                                                    currentStatus = if (status == "COMPLETED") "Поездка завершена" else "Заказ отменён"
+                                                                    currentStatus =
+                                                                        if (status == "COMPLETED") "Поездка завершена" else "Заказ отменён"
 
                                                                     // ← СБРАСЫВАЕМ ВСЁ!
                                                                     showOrderDetails = false
@@ -586,8 +635,12 @@ fun ClientHomeScreen(navController: NavController) {
 
                                                                     activeOrderManager.clear()
                                                                     sseClient.disconnect()
-                                                                    Log.d(TAG, "Заказ завершён — всё очищено")
+                                                                    Log.d(
+                                                                        TAG,
+                                                                        "Заказ завершён — всё очищено"
+                                                                    )
                                                                 }
+
                                                                 else -> {
                                                                     currentStatus = when (status) {
                                                                         "ACCEPTED", "PICKED_UP" -> "Заказ принят"
