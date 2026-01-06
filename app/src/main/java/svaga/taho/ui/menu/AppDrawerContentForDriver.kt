@@ -26,9 +26,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import svaga.taho.ui.auth.AuthViewModel
 import androidx.core.net.toUri
+import svaga.taho.ui.navigation.Screen
 
 @Composable
-fun AppDrawerContent(
+fun AppDrawerContentForDriver(
     navController: NavController,
     authViewModel: AuthViewModel = hiltViewModel(),
     name: String,
@@ -47,6 +48,8 @@ fun AppDrawerContent(
             .background(MaterialTheme.colorScheme.surface)
             .padding(16.dp)
     ) {
+
+
         // Header with name and phone
         Text(
             text = name,
@@ -62,10 +65,10 @@ fun AppDrawerContent(
 
         // История заказов
         ListItem(
-            headlineContent = { Text("История заказов") },
+            headlineContent = { Text("Статистика") },
             modifier = Modifier.clickable {
-                // Пока ничего не происходит
                 onCloseDrawer()
+                navController.navigate(Screen.Statistics.route)
             }
         )
 

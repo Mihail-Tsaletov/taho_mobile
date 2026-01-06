@@ -14,6 +14,7 @@ import svaga.taho.ui.auth.RegisterScreen
 import svaga.taho.ui.auth.RoleSelectionScreen
 import svaga.taho.ui.client.ClientHomeScreen
 import svaga.taho.ui.driver.DriverHomeScreen
+import svaga.taho.ui.driver.StatisticsScreen
 
 import javax.inject.Inject
 
@@ -39,5 +40,6 @@ fun AppNavGraph(navController: NavHostController) {
         composable(Screen.RoleSelection.route) { RoleSelectionScreen(navController) }
         composable(Screen.ClientHome.route) { ClientHomeScreen(navController) }
         composable(Screen.DriverHome.route) { DriverHomeScreen(navController) }
+        composable(Screen.Statistics.route) { StatisticsScreen(navController = navController) }
     }
 }

@@ -7,13 +7,14 @@ import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -42,6 +43,7 @@ import svaga.taho.di.AppModule
 import svaga.taho.ui.auth.AuthViewModel
 import svaga.taho.ui.client.sseJob
 import svaga.taho.ui.menu.AppDrawerContent
+import svaga.taho.ui.menu.AppDrawerContentForDriver
 import svaga.taho.util.SseClient
 import svaga.taho.util.playNotificationSound
 import java.util.*
@@ -67,6 +69,9 @@ fun DriverHomeScreen(navController: NavController) {
     var mapObjects by remember { mutableStateOf<MapObjectCollection?>(null) }
     var isArrived by remember { mutableStateOf(false) }
     var isPickedUp by remember { mutableStateOf(false) }
+    var driverName by remember { mutableStateOf("Загрузка...") }
+    var driverStatus by remember { mutableStateOf("OFFLINE") }
+    var showStatusSheet by remember { mutableStateOf(false) }
 
 
     var newOrdersSseJob by remember { mutableStateOf<Job?>(null) }
@@ -84,6 +89,9 @@ fun DriverHomeScreen(navController: NavController) {
         AppModule.ApiProvider::class.java
     ).tokenManager().tokenFlow.collectAsState(initial = "")
 
+
+        // TODO Заменить как в примере для статуса водилы на линии и т.д
+    // TODO бро ты умрешь и т.д.
     val tokenManager: TokenManager = hiltViewModel<AuthViewModel>().tokenManager
     // Реактивно получаем данные
     val userName by tokenManager.nameFlow.collectAsState(initial = "Загрузка...")
@@ -147,6 +155,7 @@ fun DriverHomeScreen(navController: NavController) {
                             status = "ASSIGNED"
                         )
 
+
                         currentOrder = order
                         playNotificationSound(context)
                     }
@@ -164,6 +173,7 @@ fun DriverHomeScreen(navController: NavController) {
 
     LaunchedEffect(Unit) {
         activeOrderManager.loadActiveOrderForDriver()
+
     }
 
     LaunchedEffect(activeDriverOrder) {
@@ -188,7 +198,6 @@ fun DriverHomeScreen(navController: NavController) {
                 try {
                     apiService.acceptOrder("Bearer $token", order.id)
                     currentOrder = order.copy(status = "ACCEPTED")
-
                     // Запускаем SSE для конкретного заказа
                     orderUpdatesSseJob?.cancel()
                     orderUpdatesSseJob = launch {
@@ -253,11 +262,42 @@ fun DriverHomeScreen(navController: NavController) {
         }
     }
 
+    // Функция загрузки профиля
+    suspend fun loadDriverProfile() {
+        try {
+            val profile = apiService.getDriverProfile("Bearer $token")
+            driverName = userName ?: "Имя не указано"
+            driverStatus = profile.status
+        } catch (e: Exception) {
+            // Log.e(TAG, "Ошибка загрузки профиля ПИЗДЕЦ КАКАКЯ", e)
+            driverName = "Ошибка получения имени"
+            driverStatus = "СИСИ ПИСЬКИ ВРЫЗВ ПИПИСЬКИ"
+        }
+    }
+    LaunchedEffect(token) {
+        loadDriverProfile()
+    }
+
+    // Функция смены статуса
+    suspend fun toggleStatus() {
+        val response = apiService.toggleOnlineStatus("Bearer $token")
+        if (response.isSuccessful) {
+            val newStatus = response.body()?.string()?.trim() ?: "UNKNOWN"
+            driverStatus = newStatus
+            // Toast.makeText(context, "Статус: $newStatus", Toast.LENGTH_SHORT).show()
+        } else {
+            val error = response.errorBody()?.string() ?: "Нет ответа"
+           // Log.e(TAG, "Ошибка ебучего статуса: HTTP ${response.code()}, $error")
+            // Toast.makeText(context, "Ошибка ${response.code()}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            AppDrawerContent(
+            AppDrawerContentForDriver(
                 navController = navController,
                 authViewModel = authViewModel,
                 name = userName ?: "Имя не указано",
@@ -296,6 +336,26 @@ fun DriverHomeScreen(navController: NavController) {
                         MapKitFactory.getInstance().onStart()
                     }
                 )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (driverStatus == "AVAILABLE") Color(0xFF4CAF50) else Color(0xFF9E9E9E)
+                        )
+                        .clickable { showStatusSheet = true }
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = if (driverStatus == "AVAILABLE") "На линии" else "Отдых",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+
+
 
                 // ОДНО ОКНО — В ЗАВИСИМОСТИ ОТ СТАТУСА
                 currentOrder?.let { order ->
@@ -453,6 +513,14 @@ fun DriverHomeScreen(navController: NavController) {
                             }
                         }
                     }
+                }
+                if (showStatusSheet) {
+                    DriverStatusBottomSheet(
+                        driverName = driverName,
+                        driverStatus = driverStatus,
+                        onToggleStatus = { toggleStatus() },
+                        onDismiss = { showStatusSheet = false }
+                    )
                 }
             }
         }

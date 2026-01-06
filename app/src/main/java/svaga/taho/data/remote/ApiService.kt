@@ -58,6 +58,13 @@ interface ApiService {
     suspend fun getUserProfile(
         @Header("Authorization") token: String
     ): UserProfileResponse
+
+
+    @GET("api/users/getDriver")
+    suspend fun getDriverProfile(@Header("Authorization") token: String): DriverProfileResponse
+
+    @POST("api/users/getOnLine")
+    suspend fun toggleOnlineStatus(@Header("Authorization") token: String): Response<ResponseBody>
 }
 
 data class CreateOrderRequest(
@@ -86,4 +93,12 @@ data class LoginResponse(
 data class UserProfileResponse(
     val name: String,
     val phone: String,
+)
+
+data class DriverProfileResponse(
+    val driverId: String,
+    val userId: String,
+    val name: String,
+    val phoneNumber: String,
+    val status: String
 )

@@ -1,6 +1,7 @@
 package svaga.taho.data.local
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
@@ -43,6 +44,7 @@ class TokenManager @Inject constructor(
         get() = runBlocking { tokenFlow.first() }
 
     suspend fun saveAuth(token: String, role: String, name: String, phone: String) {
+        Log.d("TokenManager", "Сохраняем: token=$token, role=$role, name=$name, phone=$phone")
         dataStore.edit {
             it[TOKEN_KEY] = token
             it[ROLE_KEY] = role
