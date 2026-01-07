@@ -49,7 +49,9 @@ interface ApiService {
     suspend fun driverArrived(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
 
     @POST("api/orders/{id}/complete")
-    suspend fun driverComplete(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
+    suspend fun driverComplete(@Header("Authorization") token: String,
+                               @Path("id") orderId: String,
+                               @Body trackJson: String): Response<ResponseBody>
 
     @POST("api/orders/{id}/pickedUp")
     suspend fun driverPickedUp(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>

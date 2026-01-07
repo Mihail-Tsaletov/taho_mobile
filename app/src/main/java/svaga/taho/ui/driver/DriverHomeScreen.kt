@@ -47,6 +47,7 @@ import svaga.taho.ui.menu.AppDrawerContentForDriver
 import svaga.taho.util.SseClient
 import svaga.taho.util.playNotificationSound
 import java.util.*
+import androidx.core.net.toUri
 
 private const val TAG = "DriverHomeScreen"
 var sseJob by mutableStateOf<Job?>(null)
@@ -422,7 +423,7 @@ fun DriverHomeScreen(navController: NavController) {
                                         context.startActivity(
                                             Intent(
                                                 Intent.ACTION_DIAL,
-                                                Uri.parse("tel:${order.passengerPhone}")
+                                                "tel:${order.passengerPhone}".toUri()
                                             )
                                         )
                                     }
@@ -440,7 +441,8 @@ fun DriverHomeScreen(navController: NavController) {
                                                     try {
                                                         apiService.driverComplete(
                                                             "Bearer $token",
-                                                            order.id
+                                                            order.id,
+                                                            "sasalka" //СЮДА ТРЕК ВСТАВЬТЕ
                                                         )
                                                         // Можно сбросить состояние или ждать COMPLETED от SSE
                                                     } catch (e: Exception) {
