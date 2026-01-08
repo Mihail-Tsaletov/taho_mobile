@@ -4,6 +4,7 @@ package svaga.taho.ui.driver
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -48,6 +49,7 @@ import svaga.taho.util.SseClient
 import svaga.taho.util.playNotificationSound
 import java.util.*
 import androidx.core.net.toUri
+import svaga.taho.util.location.TrackManager
 
 private const val TAG = "DriverHomeScreen"
 var sseJob by mutableStateOf<Job?>(null)
@@ -73,6 +75,7 @@ fun DriverHomeScreen(navController: NavController) {
     var driverName by remember { mutableStateOf("Загрузка...") }
     var driverStatus by remember { mutableStateOf("OFFLINE") }
     var showStatusSheet by remember { mutableStateOf(false) }
+    var isTracking by remember { mutableStateOf(false) }
 
 
     var newOrdersSseJob by remember { mutableStateOf<Job?>(null) }
@@ -439,11 +442,24 @@ fun DriverHomeScreen(navController: NavController) {
                                             onClick = {
                                                 scope.launch {
                                                     try {
-                                                        apiService.driverComplete(
+                                                        val trackJson = TrackManager.stopTrackingAndGetJson()
+                                                        isTracking = false
+
+                                                        val response = apiService.driverComplete(
                                                             "Bearer $token",
                                                             order.id,
-                                                            "sasalka" //СЮДА ТРЕК ВСТАВЬТЕ
+                                                            trackJson  // ← отправляем собранный трек
                                                         )
+
+                                                        if (response.isSuccessful) {
+                                                            Toast.makeText(context, "Поездка завершена, трек отправлен", Toast.LENGTH_SHORT).show()
+                                                            Log.d(TAG, "Поездка завершена, трек отправлен $trackJson")
+
+                                                        } else {
+                                                            Toast.makeText(context, "Ошибка отправки трека", Toast.LENGTH_LONG).show()
+                                                            Log.d(TAG, "оШИБКА ОТПРАВКИ ТРЕКА $trackJson")
+                                                            Log.e(TAG, "оШИБКА ОТПРАВКИ ТРЕК")
+                                                        }
                                                         // Можно сбросить состояние или ждать COMPLETED от SSE
                                                     } catch (e: Exception) {
                                                         Log.e(TAG, "Ошибка завершения заказа", e)
@@ -475,6 +491,19 @@ fun DriverHomeScreen(navController: NavController) {
                                                             order.id
                                                         )
                                                         isPickedUp = true
+                                                        if (!isTracking) {
+                                                            isTracking = true
+                                                            TrackManager.startTracking(
+                                                                context = context,
+                                                                scope = scope,
+                                                                onPointAdded = { point ->
+                                                                        Log.d(TAG, "Точка добавлена: ${point.latitude}, ${point.longitude}")
+                                                                },
+                                                                onError = { error ->
+                                                                    Toast.makeText(context, "Ошибка трека: $error", Toast.LENGTH_SHORT).show()
+                                                                }
+                                                            )
+                                                        }
                                                     } catch (e: Exception) {
                                                         Log.e(TAG, "Ошибка забора пассажира", e)
                                                     }

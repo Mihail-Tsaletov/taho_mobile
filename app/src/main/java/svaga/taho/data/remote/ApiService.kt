@@ -1,9 +1,6 @@
 package svaga.taho.data.remote
 
 import ActiveOrderResponse
-import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
-import dagger.hilt.components.SingletonComponent
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
@@ -12,8 +9,7 @@ import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
-import svaga.taho.data.local.TokenManager
-import svaga.taho.utils.ActiveOrderManager
+
 
 interface ApiService {
 

@@ -39,9 +39,9 @@ fun DriverStatusBottomSheet(
             Spacer(Modifier.height(8.dp))
 
             Text(
-                text = "Статус: ${if (driverStatus == "AVAILABLE") "На линии" else "Отдых"}",
+                text = "Статус: ${if (driverStatus == "OFFLINE") "Отдых" else "На линии"}",
                 style = MaterialTheme.typography.bodyLarge,
-                color = if (driverStatus == "AVAILABLE") Color.Green else Color.Gray
+                color = if (driverStatus == "OFFLINE") Color.Gray else Color.Green
             )
 
             Spacer(Modifier.height(16.dp))
@@ -62,11 +62,13 @@ fun DriverStatusBottomSheet(
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (driverStatus == "AVAILABLE") Color(0xFFE53935) else Color(0xFF4CAF50)
+                    containerColor = if (driverStatus == "OFFLINE") Color(0xFF37CC12) else Color(
+                        0xFFAF4C4C
+                    )
                 )
             ) {
                 Text(
-                    if (driverStatus == "AVAILABLE") "Уйти с линии" else "Выйти на линию",
+                    if (driverStatus == "OFFLINE") "Выйти на линию" else "Уйти c линии",
                     color = Color.White
                 )
             }
@@ -75,3 +77,6 @@ fun DriverStatusBottomSheet(
         }
     }
 }
+
+
+//TODO сделать прооверку на остальные статусы водилы
