@@ -76,6 +76,8 @@ fun DriverHomeScreen(navController: NavController) {
     var driverStatus by remember { mutableStateOf("OFFLINE") }
     var showStatusSheet by remember { mutableStateOf(false) }
     var isTracking by remember { mutableStateOf(false) }
+    var shouldTrack by remember { mutableStateOf(false) }
+
 
 
     var newOrdersSseJob by remember { mutableStateOf<Job?>(null) }
@@ -100,6 +102,22 @@ fun DriverHomeScreen(navController: NavController) {
     // Реактивно получаем данные
     val userName by tokenManager.nameFlow.collectAsState(initial = "Загрузка...")
     val userPhone by tokenManager.phoneFlow.collectAsState(initial = "Загрузка...")
+
+
+    val (statusColor, statusText, statusClickable) = when (driverStatus) {
+        "AVAILABLE" -> Triple(Color(0xFF4CAF50), "На линии", true)
+
+        "OFFLINE" -> Triple(Color(0xFF9E9E9E), "Отдых", true
+        )
+
+        "BUSY", "ASSIGNED", "IN_PROGRESS" -> Triple(Color(0xFFFF9800), "В заказе", false
+        )
+        else -> Triple(
+            Color(0xFF9E9E9E),
+            "Неизвестно",
+            false
+        )
+    }
 
 
     val apiService = remember {
@@ -156,7 +174,8 @@ fun DriverHomeScreen(navController: NavController) {
                             passengerPhone = json.getString("passengerPhone"),
                             price = json.getString("price"),
                             distance = json.getString("distance"),
-                            status = "ASSIGNED"
+                            status = "ASSIGNED",
+                            inCity = json.optBoolean("inCity", true)
                         )
 
 
@@ -244,10 +263,12 @@ fun DriverHomeScreen(navController: NavController) {
                                                         passengerPhone = json.getString("passengerPhone"),
                                                         price = json.getString("price"),
                                                         distance = json.getString("distance"),
-                                                        status = "ASSIGNED"
+                                                        status = "ASSIGNED",
+                                                        inCity = json.optBoolean("inCity", true)
                                                     )
 
                                                     currentOrder = order
+                                                    shouldTrack = !order.inCity
                                                     playNotificationSound(context)
                                                 }
                                             )
@@ -284,17 +305,18 @@ fun DriverHomeScreen(navController: NavController) {
 
     // Функция смены статуса
     suspend fun toggleStatus() {
+        if (driverStatus in listOf("BUSY", "ASSIGNED", "IN_PROGRESS")) {
+            Log.d(TAG, "Нельзя менять статус во время заказа: $driverStatus")
+            return
+        }
+
         val response = apiService.toggleOnlineStatus("Bearer $token")
         if (response.isSuccessful) {
-            val newStatus = response.body()?.string()?.trim() ?: "UNKNOWN"
+            val newStatus = response.body()?.string()?.trim() ?: driverStatus
             driverStatus = newStatus
-            // Toast.makeText(context, "Статус: $newStatus", Toast.LENGTH_SHORT).show()
-        } else {
-            val error = response.errorBody()?.string() ?: "Нет ответа"
-           // Log.e(TAG, "Ошибка ебучего статуса: HTTP ${response.code()}, $error")
-            // Toast.makeText(context, "Ошибка ${response.code()}", Toast.LENGTH_LONG).show()
         }
     }
+
 
 
 
@@ -345,14 +367,14 @@ fun DriverHomeScreen(navController: NavController) {
                         .align(Alignment.TopEnd)
                         .padding(16.dp)
                         .clip(CircleShape)
-                        .background(
-                            if (driverStatus == "AVAILABLE") Color(0xFF4CAF50) else Color(0xFF9E9E9E)
-                        )
-                        .clickable { showStatusSheet = true }
+                        .background(statusColor)
+                        .clickable(enabled = statusClickable) {
+                            showStatusSheet = true
+                        }
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Text(
-                        text = if (driverStatus == "AVAILABLE") "На линии" else "Отдых",
+                        text = statusText,
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
@@ -442,8 +464,11 @@ fun DriverHomeScreen(navController: NavController) {
                                             onClick = {
                                                 scope.launch {
                                                     try {
-                                                        val trackJson = TrackManager.stopTrackingAndGetJson()
-                                                        isTracking = false
+                                                        val trackJson = if (shouldTrack) {
+                                                            TrackManager.stopTrackingAndGetJson()
+                                                        } else {
+                                                            "[]" //  null, если бэк разрешает
+                                                        }
 
                                                         val response = apiService.driverComplete(
                                                             "Bearer $token",
@@ -491,18 +516,21 @@ fun DriverHomeScreen(navController: NavController) {
                                                             order.id
                                                         )
                                                         isPickedUp = true
-                                                        if (!isTracking) {
+                                                        if (shouldTrack && !isTracking) {
                                                             isTracking = true
+                                                            Log.d(TAG, "Трекинг  нужен (inCity = false)")
                                                             TrackManager.startTracking(
                                                                 context = context,
                                                                 scope = scope,
                                                                 onPointAdded = { point ->
-                                                                        Log.d(TAG, "Точка добавлена: ${point.latitude}, ${point.longitude}")
+                                                                    Log.d(TAG, "Точка добавлена: ${point.latitude}, ${point.longitude}")
                                                                 },
                                                                 onError = { error ->
                                                                     Toast.makeText(context, "Ошибка трека: $error", Toast.LENGTH_SHORT).show()
                                                                 }
                                                             )
+                                                        } else {
+                                                            Log.d(TAG, "Трекинг не нужен (inCity = true)")
                                                         }
                                                     } catch (e: Exception) {
                                                         Log.e(TAG, "Ошибка забора пассажира", e)

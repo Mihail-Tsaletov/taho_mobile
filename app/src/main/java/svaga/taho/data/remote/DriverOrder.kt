@@ -12,7 +12,8 @@ data class DriverOrder(
     val passengerPhone: String,
     val price: String,
     val status: String,
-    val distance: String
+    val distance: String,
+    val inCity: Boolean
 ){
     // Удобные геттеры — чтобы не менять весь код
     val startPointLatLon: Point
