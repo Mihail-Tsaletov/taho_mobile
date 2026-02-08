@@ -581,6 +581,7 @@ fun ClientHomeScreen(navController: NavController) {
                                                                     fromAddress = "Откуда"
                                                                     toAddress = "Куда едем?"
                                                                     orderTime = ""
+                                                                    currentStatus = "В обработке"
                                                                     driverName = null
                                                                     driverPhone = null
 
