@@ -2,7 +2,6 @@
 package svaga.taho.ui.driver
 
 import android.content.Intent
-import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -36,18 +35,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 import svaga.taho.R
 import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.DriverOrder
 import svaga.taho.di.AppModule
 import svaga.taho.ui.auth.AuthViewModel
 import svaga.taho.ui.client.sseJob
-import svaga.taho.ui.menu.AppDrawerContent
 import svaga.taho.ui.menu.AppDrawerContentForDriver
-import svaga.taho.util.SseClient
 import svaga.taho.util.playNotificationSound
-import java.util.*
 import androidx.core.net.toUri
 import svaga.taho.util.location.TrackManager
 
@@ -205,12 +200,24 @@ fun DriverHomeScreen(navController: NavController) {
             setupOrder(order)
         }
     }
-
+    // Функция загрузки профиля
+    suspend fun loadDriverProfile() {
+        try {
+            val profile = apiService.getDriverProfile("Bearer $token")
+            driverName = userName ?: "Имя не указано"
+            driverStatus = profile.status
+        } catch (e: Exception) {
+            Log.e(TAG, "Ошибка загрузки профиля", e)
+            driverName = "Ошибка получения имени"
+            driverStatus = "СИСИ ПИСЬКИ ВРЫЗВ ПИПИСЬКИ"
+        }
+    }
     // ФУНКЦИЯ ДЛЯ ПРИНЯТИЯ ЗАКАЗА
     val acceptOrder: () -> Unit = {
         currentOrder?.let { order ->
             scope.launch {
                 try {
+                    loadDriverProfile()
                     apiService.acceptOrder("Bearer $token", order.id)
                     currentOrder = order.copy(status = "ACCEPTED")
                     // Запускаем SSE для конкретного заказа
@@ -225,6 +232,14 @@ fun DriverHomeScreen(navController: NavController) {
                                 when (status) {
                                     "CANCELLED", "COMPLETED" -> {
                                         currentOrder = null
+                                        isArrived = false
+                                        isPickedUp = false
+                                        isTracking = false
+                                        shouldTrack = false
+                                        scope.launch {
+                                            delay(500) // небольшая задержка, чтобы избежать гонки
+                                            loadDriverProfile()
+                                        }
                                         orderUpdatesSseJob?.cancel()
                                         Log.d(TAG, "Заказ $status → вернулся в режим ожидания новых заказов")
                                         // Принудительный перезапуск подписки на новые заказы
@@ -314,19 +329,6 @@ fun DriverHomeScreen(navController: NavController) {
         }
     }
 
-    // Функция загрузки профиля
-    suspend fun loadDriverProfile() {
-        try {
-            val profile = apiService.getDriverProfile("Bearer $token")
-            driverName = userName ?: "Имя не указано"
-            driverStatus = profile.status
-        } catch (e: Exception) {
-            // Log.e(TAG, "Ошибка загрузки профиля ПИЗДЕЦ КАКАКЯ", e)
-            driverName = "Ошибка получения имени"
-            driverStatus = "СИСИ ПИСЬКИ ВРЫЗВ ПИПИСЬКИ"
-        }
-    }
-
     LaunchedEffect(token) {
         loadDriverProfile()
     }
@@ -350,6 +352,7 @@ fun DriverHomeScreen(navController: NavController) {
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = false,
         drawerContent = {
             AppDrawerContentForDriver(
                 navController = navController,
@@ -454,16 +457,14 @@ fun DriverHomeScreen(navController: NavController) {
                                     }
                                 }
                             } else { // ← АКТИВНЫЙ ЗАКАЗ
-                                Text(
-                                    "Заказ принят",
+                                Text("Заказ принят",
                                     color = Color.Green,
                                     fontSize = 22.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Spacer(Modifier.height(12.dp))
                                 Text("Пассажир: ${order.passengerName}")
-                                Text(
-                                    "Телефон: ${order.passengerPhone}",
+                                Text("Телефон: ${order.passengerPhone}",
                                     color = Color.Blue,
                                     modifier = Modifier.clickable {
                                         context.startActivity(
@@ -499,22 +500,24 @@ fun DriverHomeScreen(navController: NavController) {
                                                                 "Поездка завершена, трек отправлен",
                                                                 Toast.LENGTH_SHORT
                                                             ).show()
-                                                            Log.d(
-                                                                TAG,
-                                                                "Поездка завершена, трек отправлен $trackJson"
-                                                            )
+                                                            Log.d(TAG, "Поездка завершена, трек отправлен $trackJson")
+                                                            loadDriverProfile()
+
                                                         } else {
                                                             Toast.makeText(
                                                                 context,
                                                                 "Ошибка отправки трека",
                                                                 Toast.LENGTH_LONG
                                                             ).show()
-                                                            Log.d(
-                                                                TAG,
-                                                                "оШИБКА ОТПРАВКИ ТРЕКА $trackJson"
-                                                            )
                                                             Log.e(TAG, "оШИБКА ОТПРАВКИ ТРЕК")
                                                         }
+
+                                                        currentOrder = null
+                                                        isArrived = false
+                                                        isPickedUp = false
+                                                        isTracking = false
+                                                        shouldTrack = false
+
                                                         // Можно сбросить состояние или ждать COMPLETED от SSE
                                                     } catch (e: Exception) {
                                                         Log.e(TAG, "Ошибка завершения заказа", e)
@@ -545,32 +548,19 @@ fun DriverHomeScreen(navController: NavController) {
                                                         isPickedUp = true
                                                         if (shouldTrack && !isTracking) {
                                                             isTracking = true
-                                                            Log.d(
-                                                                TAG,
-                                                                "Трекинг нужен (inCity = false)"
-                                                            )
+                                                            Log.d(TAG, "Трекинг нужен (inCity = false)")
                                                             TrackManager.startTracking(
                                                                 context = context,
                                                                 scope = scope,
                                                                 onPointAdded = { point ->
-                                                                    Log.d(
-                                                                        TAG,
-                                                                        "Точка добавлена: ${point.latitude}, ${point.longitude}"
-                                                                    )
+                                                                    Log.d(TAG, "Точка добавлена: ${point.latitude}, ${point.longitude}")
                                                                 },
                                                                 onError = { error ->
-                                                                    Toast.makeText(
-                                                                        context,
-                                                                        "Ошибка трека: $error",
-                                                                        Toast.LENGTH_SHORT
-                                                                    ).show()
+                                                                    Toast.makeText(context, "Ошибка трека: $error", Toast.LENGTH_SHORT).show()
                                                                 }
                                                             )
                                                         } else {
-                                                            Log.d(
-                                                                TAG,
-                                                                "Трекинг не нужен (inCity = true)"
-                                                            )
+                                                            Log.d(TAG, "Трекинг не нужен (inCity = true)")
                                                         }
                                                     } catch (e: Exception) {
                                                         Log.e(TAG, "Ошибка забора пассажира", e)

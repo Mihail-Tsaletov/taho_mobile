@@ -629,7 +629,7 @@ fun ClientHomeScreen(navController: NavController) {
                                         }
                                     }
                                 },
-                                enabled = fromPoint != null && toPoint != null,
+                                enabled = fromPoint != null && toPoint != null && fromAddress != "Откуда" && toAddress != "Куда едем?",
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(56.dp),
