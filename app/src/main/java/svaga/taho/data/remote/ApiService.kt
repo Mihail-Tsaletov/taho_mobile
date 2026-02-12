@@ -31,13 +31,13 @@ interface ApiService {
     @GET("api/orders/getOrdersByUserIdWithStatuses")
     suspend fun getActiveOrders(
         @Header("Authorization") token: String,
-        @Query("statuses") statuses: String = "PENDING,ACCEPTED,IN_PROGRESS"
+        @Query("statuses") statuses: String = "PENDING,ACCEPTED,IN_PROGRESS,ARRIVED,ASSIGNED"
     ): Response<List<ActiveOrderResponse>>
 
     @GET("api/orders/getOrdersByDriverIdWithStatuses")
     suspend fun getActiveOrdersForDriver(
         @Header("Authorization") token: String,
-        @Query("statuses") statuses: String = "ASSIGNED,ACCEPTED,IN_PROGRESS"
+        @Query("statuses") statuses: String = "ASSIGNED,ACCEPTED,IN_PROGRESS,ARRIVED"
     ): Response<List<DriverOrder>>
 
     @POST("api/orders/{id}/accept")
