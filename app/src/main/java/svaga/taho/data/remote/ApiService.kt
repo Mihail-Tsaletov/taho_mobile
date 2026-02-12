@@ -1,9 +1,6 @@
 package svaga.taho.data.remote
 
 import ActiveOrderResponse
-import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
-import dagger.hilt.components.SingletonComponent
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
@@ -12,8 +9,9 @@ import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
-import svaga.taho.data.local.TokenManager
-import svaga.taho.utils.ActiveOrderManager
+import java.math.BigDecimal
+import java.time.LocalDateTime
+
 
 interface ApiService {
 
@@ -33,13 +31,13 @@ interface ApiService {
     @GET("api/orders/getOrdersByUserIdWithStatuses")
     suspend fun getActiveOrders(
         @Header("Authorization") token: String,
-        @Query("statuses") statuses: String = "PENDING,ACCEPTED,IN_PROGRESS"
+        @Query("statuses") statuses: String = "PENDING,ACCEPTED,IN_PROGRESS,ARRIVED,ASSIGNED"
     ): Response<List<ActiveOrderResponse>>
 
     @GET("api/orders/getOrdersByDriverIdWithStatuses")
     suspend fun getActiveOrdersForDriver(
         @Header("Authorization") token: String,
-        @Query("statuses") statuses: String = "ASSIGNED,ACCEPTED,IN_PROGRESS"
+        @Query("statuses") statuses: String = "ASSIGNED,ACCEPTED,IN_PROGRESS,ARRIVED"
     ): Response<List<DriverOrder>>
 
     @POST("api/orders/{id}/accept")
@@ -49,7 +47,9 @@ interface ApiService {
     suspend fun driverArrived(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
 
     @POST("api/orders/{id}/complete")
-    suspend fun driverComplete(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
+    suspend fun driverComplete(@Header("Authorization") token: String,
+                               @Path("id") orderId: String,
+                               @Body trackJson: String): Response<ResponseBody>
 
     @POST("api/orders/{id}/pickedUp")
     suspend fun driverPickedUp(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
@@ -58,6 +58,20 @@ interface ApiService {
     suspend fun getUserProfile(
         @Header("Authorization") token: String
     ): UserProfileResponse
+
+
+    @GET("api/users/getDriver")
+    suspend fun getDriverProfile(@Header("Authorization") token: String): DriverProfileResponse
+
+    @POST("api/users/getOnLine")
+    suspend fun toggleOnlineStatus(@Header("Authorization") token: String): Response<ResponseBody>
+
+
+    @GET("getAllOrdersByDriverId")
+    suspend fun getOrdersByDriverId(
+        @Header("Authorization") token: String,
+        @Query("driverId") driverId: String
+    ): List<OrderWeb>
 }
 
 data class CreateOrderRequest(
@@ -86,4 +100,22 @@ data class LoginResponse(
 data class UserProfileResponse(
     val name: String,
     val phone: String,
+)
+
+data class DriverProfileResponse(
+    val driverId: String,
+    val userId: String,
+    val name: String,
+    val phoneNumber: String,
+    val status: String
+)
+
+
+///лучше сделать чтобы сервер фильтровал по временому отрезку заказы, то шо так клиент получает все заказы и уже потом думает какие показывать
+data class OrderWeb(
+    val orderId: String,
+    val price: BigDecimal,
+    val startAddress: String,
+    val endAddress: String,
+    val orderTime: LocalDateTime
 )

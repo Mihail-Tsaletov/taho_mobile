@@ -1,7 +1,6 @@
 package svaga.taho.ui.menu
 
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,7 +16,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Divider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,9 +38,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import svaga.taho.ui.auth.AuthViewModel
 import androidx.core.net.toUri
+import svaga.taho.ui.navigation.Screen
 
 @Composable
-fun AppDrawerContent(
+fun AppDrawerContentForDriver(
     navController: NavController,
     authViewModel: AuthViewModel = hiltViewModel(),
     name: String,
@@ -105,9 +104,10 @@ fun AppDrawerContent(
 
         // История заказов
         ListItem(
-            headlineContent = { Text("История заказов") },
+            headlineContent = { Text("Статистика") },
             modifier = Modifier.clickable {
                 onCloseDrawer()
+                navController.navigate(Screen.Statistics.route)
             }
         )
 
@@ -116,7 +116,7 @@ fun AppDrawerContent(
             headlineContent = { Text("Связаться с оператором") },
             modifier = Modifier.clickable {
                 onCloseDrawer()
-                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:+71234567890"))
+                val intent = Intent(Intent.ACTION_DIAL, "tel:+71234567890".toUri()) // Замените на реальный номер
                 context.startActivity(intent)
             }
         )
@@ -141,8 +141,8 @@ fun AppDrawerContent(
         ListItem(
             headlineContent = { Text("О приложении") },
             modifier = Modifier.clickable {
+                // Пока ничего, можно добавить диалог или тост
                 onCloseDrawer()
-                // Здесь можно показать диалог или тост
             }
         )
     }
