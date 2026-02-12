@@ -9,13 +9,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import java.math.BigDecimal
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DriverStatusBottomSheet(
     driverName: String,
     driverStatus: String,
+    driverBalance: BigDecimal,
     onToggleStatus: suspend () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -41,13 +44,15 @@ fun DriverStatusBottomSheet(
             Text(
                 text = "Статус: ${if (driverStatus == "OFFLINE") "Отдых" else "На линии"}",
                 style = MaterialTheme.typography.bodyLarge,
-                color = if (driverStatus == "OFFLINE") Color.Gray else Color.Green
+                fontWeight = FontWeight.Bold,
+                fontSize = 22.sp,
+                color = if (driverStatus == "OFFLINE") Color.Gray else Color(0xFF10B826)
             )
 
             Spacer(Modifier.height(16.dp))
 
             Text(
-                text = "Баланс: 0 ₽", // пока статический
+                text = "Баланс: $driverBalance ₽",
                 style = MaterialTheme.typography.bodyLarge
             )
 

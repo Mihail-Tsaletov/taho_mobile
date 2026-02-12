@@ -11,6 +11,7 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 import java.math.BigDecimal
 import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 
 interface ApiService {
@@ -66,13 +67,29 @@ interface ApiService {
     @POST("api/users/getOnLine")
     suspend fun toggleOnlineStatus(@Header("Authorization") token: String): Response<ResponseBody>
 
-
-    @GET("getAllOrdersByDriverId")
+    @GET("api/orders/getAllOrdersByDriverId")
     suspend fun getOrdersByDriverId(
         @Header("Authorization") token: String,
-        @Query("driverId") driverId: String
+        @Query("driverId") driverId: String,
+        @Query("from") from: String? = null,
+        @Query("to") to: String? = null
     ): List<OrderWeb>
+
 }
+
+
+
+data class OrderWeb(
+    val orderId: String,
+    val price: BigDecimal?,
+    val startAddress: String,
+    val endAddress: String,
+    val orderTime: String  // ← строка в ISO формате
+) {
+    val createdAt: LocalDateTime
+        get() = LocalDateTime.parse(orderTime, DateTimeFormatter.ISO_DATE_TIME)
+}
+
 
 data class CreateOrderRequest(
     val startPoint: String,
@@ -107,15 +124,8 @@ data class DriverProfileResponse(
     val userId: String,
     val name: String,
     val phoneNumber: String,
-    val status: String
+    val status: String,
+    val balance: BigDecimal
 )
 
 
-///лучше сделать чтобы сервер фильтровал по временому отрезку заказы, то шо так клиент получает все заказы и уже потом думает какие показывать
-data class OrderWeb(
-    val orderId: String,
-    val price: BigDecimal,
-    val startAddress: String,
-    val endAddress: String,
-    val orderTime: LocalDateTime
-)

@@ -52,6 +52,16 @@ class TokenManager @Inject constructor(
             it[PHONE_KEY] = phone
         }
     }
+    private val DRIVER_ID_KEY = stringPreferencesKey("driver_id")
+
+    val driverIdFlow: Flow<String?> = dataStore.data.map { it[DRIVER_ID_KEY] }
+
+    suspend fun saveDriverId(driverId: String) {
+        dataStore.edit {
+            it[DRIVER_ID_KEY] = driverId
+        }
+    }
+
 
     suspend fun saveToken(token: String) {
         dataStore.edit { it[TOKEN_KEY] = token }

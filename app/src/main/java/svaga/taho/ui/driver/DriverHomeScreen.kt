@@ -45,6 +45,8 @@ import svaga.taho.ui.menu.AppDrawerContentForDriver
 import svaga.taho.util.playNotificationSound
 import androidx.core.net.toUri
 import svaga.taho.util.location.TrackManager
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 private const val TAG = "DriverHomeScreen"
 var sseJob by mutableStateOf<Job?>(null)
@@ -72,6 +74,7 @@ fun DriverHomeScreen(navController: NavController) {
     var shouldTrack by remember { mutableStateOf(false) }
     var newOrdersSseJob by remember { mutableStateOf<Job?>(null) }
     var orderUpdatesSseJob by remember { mutableStateOf<Job?>(null) }
+    var driverBalance by remember { mutableStateOf<BigDecimal>(BigDecimal.ZERO) }
 
     val sseClient = remember {
         EntryPointAccessors.fromApplication(
@@ -206,6 +209,8 @@ fun DriverHomeScreen(navController: NavController) {
             val profile = apiService.getDriverProfile("Bearer $token")
             driverName = userName ?: "Имя не указано"
             driverStatus = profile.status
+            tokenManager.saveDriverId(profile.driverId)
+            driverBalance = profile.balance  // ← берём баланс
         } catch (e: Exception) {
             Log.e(TAG, "Ошибка загрузки профиля", e)
             driverName = "Ошибка получения имени"
@@ -401,14 +406,27 @@ fun DriverHomeScreen(navController: NavController) {
                         .clip(CircleShape)
                         .background(statusColor)
                         .clickable(enabled = statusClickable) { showStatusSheet = true }
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(horizontal = 20.dp, vertical = 8.dp)
                 ) {
-                    Text(
-                        text = statusText,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = statusText,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        if (driverBalance > BigDecimal.ZERO) {
+                            Text(
+                                text = "${driverBalance.setScale(0, RoundingMode.HALF_UP)} ₽",
+                                color = Color.White.copy(alpha = 0.8f),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
                 }
 
                 // ОДНО ОКНО — В ЗАВИСИМОСТИ ОТ СТАТУСА
@@ -606,7 +624,8 @@ fun DriverHomeScreen(navController: NavController) {
                         driverName = driverName,
                         driverStatus = driverStatus,
                         onToggleStatus = { toggleStatus() },
-                        onDismiss = { showStatusSheet = false }
+                        onDismiss = { showStatusSheet = false },
+                        driverBalance = driverBalance
                     )
                 }
             }

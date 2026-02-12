@@ -1,7 +1,5 @@
 package svaga.taho.ui.driver
 
-import android.util.Log
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,50 +11,30 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import svaga.taho.data.local.TokenManager
-import svaga.taho.data.remote.ApiService
-import svaga.taho.data.remote.OrderWeb
+import svaga.taho.util.location.DriverStatisticsViewModel
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-import javax.inject.Inject
 
 // Модель заказа (заглушка)
 data class DriverTrip(
     val id: String,
     val createdAt: LocalDateTime,
     val price: Int,
-    val durationMinutes: Int,
     val startAddress: String,
     val endAddress: String
-)
-
-// Заглушка данных
-private val mockTripsWeek = listOf(
-    DriverTrip("1", LocalDateTime.now().minusDays(1), 1200, 25, "ул. Туманяна 5", "ул. Абовяна 12"),
-    DriverTrip("2", LocalDateTime.now().minusDays(3), 850, 18, "ул. Московян 8", "ул. Саят-Нова 3"),
-    DriverTrip("3", LocalDateTime.now().minusDays(5), 2100, 42, "ул. Налбандяна 10", "аэропорт Звартноц")
-)
-
-private val mockTripsMonth = mockTripsWeek + listOf(
-    DriverTrip("4", LocalDateTime.now().minusDays(10), 950, 20, "ул. Амиряна 7", "ул. Сарьяна 2"),
-    DriverTrip("5", LocalDateTime.now().minusDays(15), 1800, 35, "ул. Комитаса 45", "ул. Аршакуняц 56")
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatisticsScreen(navController: NavController) {
+    val viewModel: DriverStatisticsViewModel = hiltViewModel()
+    val state by viewModel.state.collectAsState()
     val pagerState = rememberPagerState(pageCount = { 2 })
     val scope = rememberCoroutineScope()
 
@@ -77,29 +55,44 @@ fun StatisticsScreen(navController: NavController) {
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            TabRow(selectedTabIndex = pagerState.currentPage) {
-                Tab(
-                    selected = pagerState.currentPage == 0,
-                    onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
-                    text = { Text("За неделю") }
-                )
-                Tab(
-                    selected = pagerState.currentPage == 1,
-                    onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
-                    text = { Text("За месяц") }
-                )
-            }
-
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) { page ->
-                when (page) {
-                    0 -> TripList(trips = mockTripsWeek)
-                    1 -> TripList(trips = mockTripsMonth)
+            if (state.isLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
                 }
+            } else if (state.error != null) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = state.error ?: "Ошибка",
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else {
+                TabRow(selectedTabIndex = pagerState.currentPage) {
+                    Tab(
+                        selected = pagerState.currentPage == 0,
+                        onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                        text = { Text("За неделю") }
+                    )
+                    Tab(
+                        selected = pagerState.currentPage == 1,
+                        onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                        text = { Text("За месяц") }
+                    )
+                }
+
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) { page ->
+                    val trips = if (page == 0) state.weekTrips else state.monthTrips
+                    TripList(trips = trips)
+                }
+
+                // Итоговая статистика (можно оставить внизу)
+               StatisticsSummary(trips = if (pagerState.currentPage == 0) state.weekTrips else state.monthTrips)
             }
         }
     }
@@ -159,22 +152,7 @@ private fun TripItem(trip: DriverTrip) {
                     fontWeight = FontWeight.Bold
                 )
             }
-
             Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Время в пути: ${trip.durationMinutes} мин",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
             Text(
                 text = "От: ${trip.startAddress}",
                 style = MaterialTheme.typography.bodyMedium,
@@ -185,6 +163,60 @@ private fun TripItem(trip: DriverTrip) {
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1
             )
+        }
+    }
+}
+
+@Composable
+private fun StatisticsSummary(trips: List<DriverTrip>) {
+    val totalTrips = trips.size
+    val totalEarnings = trips.sumOf { it.price }
+    val avgEarnings = if (totalTrips > 0) totalEarnings / totalTrips else 0
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        elevation = CardDefaults.cardElevation(4.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "$totalTrips",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text("Поездок", style = MaterialTheme.typography.bodySmall)
+                }
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "$totalEarnings ₽",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text("Заработок", style = MaterialTheme.typography.bodySmall)
+                }
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "$avgEarnings ₽",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text("Средний чек", style = MaterialTheme.typography.bodySmall)
+                }
+            }
         }
     }
 }
