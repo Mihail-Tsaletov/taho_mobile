@@ -89,7 +89,7 @@ fun ClientHomeScreen(navController: NavController) {
     }
 
     // Выбор точки на карте
-    var selectingPoint by remember { mutableStateOf<String?>(null) } // "from", "to" или null
+   // var selectingPoint by remember { mutableStateOf<String?>(null) } // "from", "to" или null
     var fromPlacemark  by remember { mutableStateOf<PlacemarkMapObject?>(null) }
     var toPlacemark    by remember { mutableStateOf<PlacemarkMapObject?>(null) }
     val mapViewState   = remember { mutableStateOf<MapView?>(null) }
@@ -259,24 +259,30 @@ fun ClientHomeScreen(navController: NavController) {
 
     // Обработчик нажатия на карту
     fun handleMapTap(point: Point) {
-        val mode = selectingPoint ?: return
+        val mode = focusedField ?: return   // если ничего не в фокусе — игнорируем тап
+
         coroutineScope.launch {
             val address = getAddressFromPoint(point)
-            val displayAddress = address.ifBlank { "Выбрано на карте" }
+            val displayAddr = address.ifBlank { "Выбрано на карте" }
 
             when (mode) {
                 "from" -> {
                     fromPoint = point
-                    fromAddress = displayAddress
+                    fromAddress = displayAddr
+                    fromInput = displayAddr          // синхронизируем поле ввода
                     updatePlacemark("from", point)
                 }
                 "to" -> {
                     toPoint = point
-                    toAddress = displayAddress
+                    toAddress = displayAddr
+                    toInput = displayAddr            // синхронизируем поле ввода
                     updatePlacemark("to", point)
                 }
             }
-            selectingPoint = null
+
+            // Опционально: убираем фокус после выбора точки
+            focusManager.clearFocus()
+            focusedField = null
         }
     }
 
@@ -452,7 +458,7 @@ fun ClientHomeScreen(navController: NavController) {
                         // ← Режим ввода адресов (когда заказа ещё нет)
 
                         // Кнопки выбора на карте
-                        Row(
+/*                        Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
@@ -472,7 +478,7 @@ fun ClientHomeScreen(navController: NavController) {
                             ) {
                                 Text("Куда на карте")
                             }
-                        }
+                        }*/
 
                         Spacer(Modifier.height(12.dp))
 
