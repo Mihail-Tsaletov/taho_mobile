@@ -60,18 +60,20 @@ fun DriverHomeScreen(navController: NavController) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val authViewModel: AuthViewModel = hiltViewModel()
 
+    val driverViewModel: DriverViewModel = hiltViewModel()
+    val currentOrder by driverViewModel.currentOrder.collectAsState()
+    val isArrived by driverViewModel.isArrived.collectAsState()
+    val isPickedUp by driverViewModel.isPickedUp.collectAsState()
+    val isTracking by driverViewModel.isTracking.collectAsState()
+    val shouldTrack by driverViewModel.shouldTrack.collectAsState()
+
     // СОСТОЯНИЯ
-    var currentOrder by remember { mutableStateOf<DriverOrder?>(null) }
     var routePolyline by remember { mutableStateOf<PolylineMapObject?>(null) }
     var driverMarker by remember { mutableStateOf<PlacemarkMapObject?>(null) }
     var mapObjects by remember { mutableStateOf<MapObjectCollection?>(null) }
-    var isArrived by remember { mutableStateOf(false) }
-    var isPickedUp by remember { mutableStateOf(false) }
     var driverName by remember { mutableStateOf("Загрузка...") }
     var driverStatus by remember { mutableStateOf("OFFLINE") }
     var showStatusSheet by remember { mutableStateOf(false) }
-    var isTracking by remember { mutableStateOf(false) }
-    var shouldTrack by remember { mutableStateOf(false) }
     var newOrdersSseJob by remember { mutableStateOf<Job?>(null) }
     var orderUpdatesSseJob by remember { mutableStateOf<Job?>(null) }
     var driverBalance by remember { mutableStateOf<BigDecimal>(BigDecimal.ZERO) }
@@ -164,8 +166,8 @@ fun DriverHomeScreen(navController: NavController) {
                                 status = "ASSIGNED",
                                 inCity = json.optBoolean("inCity", true)
                             )
-                            currentOrder = order
-                            shouldTrack = !order.inCity
+                            driverViewModel.setCurrentOrder(order)
+                            driverViewModel.setShouldTrack(!order.inCity)
                             playNotificationSound(context)
                         }
                     )
@@ -194,13 +196,19 @@ fun DriverHomeScreen(navController: NavController) {
     LaunchedEffect(activeDriverOrder) {
         activeDriverOrder?.let { order ->
             Log.d(TAG, "Активный заказ загружен: ${order.id}, статус: ${order.status}")
-            currentOrder = order.copy(
-                status = when (order.status) {
-                    "ASSIGNED" -> "ASSIGNED"
-                    else -> "ACCEPTED"
-                }
-            )
-            setupOrder(order)
+            if (currentOrder?.id != order.id) {
+                driverViewModel.setCurrentOrder(
+                    order.copy(
+                        status = when (order.status) {
+                            "ASSIGNED" -> "ASSIGNED"
+                            else -> "ACCEPTED"
+                        }
+                    )
+                )
+                setupOrder(order)
+            } else {
+                Log.d(TAG, "Заказ уже в ViewModel — пропускаем обновление")
+            }
         }
     }
     // Функция загрузки профиля
@@ -224,7 +232,7 @@ fun DriverHomeScreen(navController: NavController) {
                 try {
                     loadDriverProfile()
                     apiService.acceptOrder("Bearer $token", order.id)
-                    currentOrder = order.copy(status = "ACCEPTED")
+                    driverViewModel.setCurrentOrder(order.copy(status = "ACCEPTED"))
                     // Запускаем SSE для конкретного заказа
                     orderUpdatesSseJob?.cancel()
                     orderUpdatesSseJob = scope.launch {
@@ -236,11 +244,7 @@ fun DriverHomeScreen(navController: NavController) {
                                 val status = json.optString("status")
                                 when (status) {
                                     "CANCELLED", "COMPLETED" -> {
-                                        currentOrder = null
-                                        isArrived = false
-                                        isPickedUp = false
-                                        isTracking = false
-                                        shouldTrack = false
+                                        driverViewModel.resetOrderStates()
                                         scope.launch {
                                             delay(500) // небольшая задержка, чтобы избежать гонки
                                             loadDriverProfile()
@@ -285,8 +289,8 @@ fun DriverHomeScreen(navController: NavController) {
                                                             status = "ASSIGNED",
                                                             inCity = json.optBoolean("inCity", true)
                                                         )
-                                                        currentOrder = order
-                                                        shouldTrack = !order.inCity
+                                                        driverViewModel.setCurrentOrder(order)
+                                                        driverViewModel.setShouldTrack(!order.inCity)
                                                         playNotificationSound(context)
                                                     }
                                                 )
@@ -294,13 +298,13 @@ fun DriverHomeScreen(navController: NavController) {
                                         }
                                     }
                                     "ARRIVED" -> {
-                                        isArrived = true
+                                        driverViewModel.setArrived(true)
                                         Log.d(TAG, "Водитель на месте (ARRIVED)")
                                     }
                                     "PICKED_UP" -> {
-                                        isPickedUp = true
+                                        driverViewModel.setPickedUp(true)
                                         if (shouldTrack && !isTracking) {
-                                            isTracking = true
+                                            driverViewModel.setTracking(true)
                                             TrackManager.startTracking(
                                                 context = context,
                                                 scope = scope,
@@ -468,7 +472,7 @@ fun DriverHomeScreen(navController: NavController) {
                                         Text("Принять", color = Color(0xFFE91E63))
                                     }
                                     OutlinedButton(
-                                        onClick = { currentOrder = null },
+                                        onClick = { driverViewModel.setCurrentOrder(null) },
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         Text("Отклонить", color = Color.White)
@@ -530,11 +534,7 @@ fun DriverHomeScreen(navController: NavController) {
                                                             Log.e(TAG, "оШИБКА ОТПРАВКИ ТРЕК")
                                                         }
 
-                                                        currentOrder = null
-                                                        isArrived = false
-                                                        isPickedUp = false
-                                                        isTracking = false
-                                                        shouldTrack = false
+                                                        driverViewModel.resetOrderStates()
 
                                                         // Можно сбросить состояние или ждать COMPLETED от SSE
                                                     } catch (e: Exception) {
@@ -563,9 +563,9 @@ fun DriverHomeScreen(navController: NavController) {
                                                             "Bearer $token",
                                                             order.id
                                                         )
-                                                        isPickedUp = true
+                                                        driverViewModel.setPickedUp(true)
                                                         if (shouldTrack && !isTracking) {
-                                                            isTracking = true
+                                                            driverViewModel.setTracking(true)
                                                             Log.d(TAG, "Трекинг нужен (inCity = false)")
                                                             TrackManager.startTracking(
                                                                 context = context,
@@ -602,7 +602,7 @@ fun DriverHomeScreen(navController: NavController) {
                                                             "Bearer $token",
                                                             order.id
                                                         )
-                                                        isArrived = true
+                                                        driverViewModel.setArrived(true)
                                                     } catch (e: Exception) {
                                                         Log.e(TAG, "Ошибка прибытия", e)
                                                     }

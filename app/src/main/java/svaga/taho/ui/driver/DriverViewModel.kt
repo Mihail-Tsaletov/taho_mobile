@@ -6,31 +6,71 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import svaga.taho.data.remote.DriverOrder
 import javax.inject.Inject
 
 @HiltViewModel
 class DriverViewModel @Inject constructor() : ViewModel() {
 
+    // Текущий активный заказ (null — заказа нет)
+    private val _currentOrder = MutableStateFlow<DriverOrder?>(null)
+    val currentOrder = _currentOrder.asStateFlow()
+
+    // Состояние "Я на месте" (ARRIVED)
     private val _isArrived = MutableStateFlow(false)
     val isArrived = _isArrived.asStateFlow()
 
+    // Состояние "Забрал пассажира" (PICKED_UP)
     private val _isPickedUp = MutableStateFlow(false)
     val isPickedUp = _isPickedUp.asStateFlow()
 
-    fun setArrived(arrived: Boolean) {
+    // Трекинг запущен?
+    private val _isTracking = MutableStateFlow(false)
+    val isTracking = _isTracking.asStateFlow()
+
+    // Нужно ли вести трек (не в городе)
+    private val _shouldTrack = MutableStateFlow(false)
+    val shouldTrack = _shouldTrack.asStateFlow()
+
+    // Установка текущего заказа
+    fun setCurrentOrder(order: DriverOrder?) {
         viewModelScope.launch {
-            _isArrived.value = arrived
+            _currentOrder.value = order
         }
     }
 
-    fun setPickedUp(pickedUp: Boolean) {
+    fun setArrived(value: Boolean) {
         viewModelScope.launch {
-            _isPickedUp.value = pickedUp
+            _isArrived.value = value
         }
     }
 
+    fun setPickedUp(value: Boolean) {
+        viewModelScope.launch {
+            _isPickedUp.value = value
+        }
+    }
+
+    fun setTracking(value: Boolean) {
+        viewModelScope.launch {
+            _isTracking.value = value
+        }
+    }
+
+    fun setShouldTrack(value: Boolean) {
+        viewModelScope.launch {
+            _shouldTrack.value = value
+        }
+    }
+
+    // Полный сброс всех состояний заказа (при завершении/отмене)
     fun resetOrderStates() {
-        setArrived(false)
-        setPickedUp(false)
+        viewModelScope.launch {
+            _currentOrder.value = null
+            _isArrived.value = false
+            _isPickedUp.value = false
+            _isTracking.value = false
+            _shouldTrack.value = false
+        }
     }
 }
