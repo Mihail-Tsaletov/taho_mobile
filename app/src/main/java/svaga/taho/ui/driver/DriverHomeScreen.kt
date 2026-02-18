@@ -196,13 +196,10 @@ fun DriverHomeScreen(navController: NavController) {
     LaunchedEffect(activeDriverOrder) {
         activeDriverOrder?.let { order ->
             Log.d(TAG, "Активный заказ загружен: ${order.id}, статус: ${order.status}")
-            if (currentOrder?.id != order.id) {
+            if (order.status != "COMPLETED" && currentOrder?.id != order.id) {
                 driverViewModel.setCurrentOrder(
                     order.copy(
-                        status = when (order.status) {
-                            "ASSIGNED" -> "ASSIGNED"
-                            else -> "ACCEPTED"
-                        }
+                        status = order.status
                     )
                 )
                 setupOrder(order)
