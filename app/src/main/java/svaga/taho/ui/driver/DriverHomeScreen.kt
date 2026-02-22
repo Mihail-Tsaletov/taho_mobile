@@ -40,7 +40,6 @@ import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.DriverOrder
 import svaga.taho.di.AppModule
 import svaga.taho.ui.auth.AuthViewModel
-import svaga.taho.ui.client.sseJob
 import svaga.taho.ui.menu.AppDrawerContentForDriver
 import svaga.taho.util.playNotificationSound
 import androidx.core.net.toUri
