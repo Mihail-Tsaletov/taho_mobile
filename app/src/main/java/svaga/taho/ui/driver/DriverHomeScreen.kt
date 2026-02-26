@@ -192,18 +192,68 @@ fun DriverHomeScreen(navController: NavController) {
         activeOrderManager.loadActiveOrderForDriver()
     }
 
-    LaunchedEffect(activeDriverOrder) {
+    LaunchedEffect(activeDriverOrder?.id) {
         activeDriverOrder?.let { order ->
             Log.d(TAG, "Активный заказ загружен: ${order.id}, статус: ${order.status}")
-            if (order.status != "COMPLETED" && currentOrder?.id != order.id) {
-                driverViewModel.setCurrentOrder(
-                    order.copy(
-                        status = order.status
-                    )
-                )
-                setupOrder(order)
-            } else {
-                Log.d(TAG, "Заказ уже в ViewModel — пропускаем обновление")
+
+            // Если заказ завершён или отменён на сервере — сбрасываем всё
+            if (order.status in listOf("COMPLETED", "CANCELLED")) {
+                driverViewModel.resetOrderStates()
+                Log.d(TAG, "Сервер вернул COMPLETED/CANCELLED → полный сброс")
+                return@let
+            }
+
+
+            // Если заказ тот же и статус не изменился — пропускаем
+            if (currentOrder?.id == order.id && currentOrder?.status == order.status) {
+                Log.d(TAG, "Заказ и статус уже актуальны — пропускаем")
+                return@let
+            }
+
+            // Обновляем заказ и состояния
+            driverViewModel.setCurrentOrder(order)
+            setupOrder(order)
+
+            when (order.status) {
+                "ARRIVED" -> {
+                    driverViewModel.setArrived(true)
+                    driverViewModel.setPickedUp(false)
+                    driverViewModel.setTracking(false)
+                    Log.d(TAG, "ARRIVED → isArrived = true")
+                }
+
+                "PICKED_UP" -> {
+                    driverViewModel.setArrived(true)
+                    driverViewModel.setPickedUp(true)
+                    driverViewModel.setTracking(shouldTrack)
+                    Log.d(TAG, "PICKED_UP → isPickedUp = true, трекинг = $shouldTrack")
+                }
+
+                "IN_PROGRESS" -> {
+                    driverViewModel.setArrived(true)
+                    driverViewModel.setPickedUp(true)
+                    driverViewModel.setTracking(shouldTrack)
+                    Log.d(TAG, "IN_PROGRESS → все состояния активны")
+                }
+
+                "ASSIGNED", "ACCEPTED" -> {
+                    driverViewModel.setArrived(false)
+                    driverViewModel.setPickedUp(false)
+                    driverViewModel.setTracking(false)
+                    Log.d(TAG, "ASSIGNED/ACCEPTED → сброс состояний")
+                }
+
+                else -> {
+                    Log.w(TAG, "Неизвестный статус: ${order.status} — оставляем как есть")
+                    // НЕ сбрасываем автоматически — ждём SSE или ручного сброса
+                }
+            }
+        } ?: run {
+            Log.d(TAG, "Активный заказ null от менеджера")
+            // Сбрасываем только если локально заказ ещё есть
+            if (currentOrder != null) {
+                Log.d(TAG, "Локально заказ был — сбрасываем")
+                driverViewModel.resetOrderStates()
             }
         }
     }
