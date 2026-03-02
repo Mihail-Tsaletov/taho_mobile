@@ -41,6 +41,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.CreateOrderRequest
 import svaga.taho.di.AppModule
@@ -128,6 +129,13 @@ fun ClientHomeScreen(navController: NavController) {
     // Загрузка активного заказа при запуске экрана
     LaunchedEffect(Unit) {
         activeOrderManager.loadActiveOrderForClient()
+    }
+    LaunchedEffect(activeOrder?.id) {
+        // Крутим пока есть активный заказ
+        while (activeOrder != null) {
+            delay(5_000)
+            activeOrderManager.loadActiveOrderForClient()
+        }
     }
 
     LaunchedEffect(activeOrder) {

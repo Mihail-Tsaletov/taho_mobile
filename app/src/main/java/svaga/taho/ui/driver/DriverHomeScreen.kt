@@ -1,6 +1,7 @@
 // DriverHomeScreen.kt
 package svaga.taho.ui.driver
 
+import android.content.Context
 import android.content.Intent
 import android.util.Log
 import android.widget.Toast
@@ -9,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -111,7 +113,7 @@ fun DriverHomeScreen(navController: NavController) {
     }
 
     val carIcon = ImageProvider.fromResource(context, R.drawable.ic_car_driver)
-
+/**
     // ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ — строит маршрут и анимацию
     fun setupOrder(order: DriverOrder) {
         val startPointLatLon = order.startPoint.split(",").let { Point(it[0].toDouble(), it[1].toDouble()) }
@@ -121,6 +123,38 @@ fun DriverHomeScreen(navController: NavController) {
             routePolyline = mapObjects?.addPolyline(Polyline(points))
                 ?.apply { setStrokeColor(0xFF1E88E5.toInt()); strokeWidth = 8f }
             animateDriver(startPointLatLon, points, mapObjects, carIcon, scope)
+        }
+    }
+ */
+    /**
+     * Открывает Яндекс.Карты с маршрутом до нужной точки.
+     * [point] — строка в формате "lat,lon" (как хранится в DriverOrder)
+     * [label] — подпись точки назначения в приложении
+     */
+    fun openYandexMapsNavigation(context: Context, order: DriverOrder, isPickedUp: Boolean) {
+        val (sLat, sLon) = order.startPoint.split(",").map { it.trim() }
+        val (eLat, eLon) = order.endPoint.split(",").map { it.trim() }
+
+        val routeUri = if (!isPickedUp) {
+            // ~ означает "от текущей геопозиции" — Яндекс берёт GPS сам
+            "yandexmaps://maps.yandex.ru/?rtext=~$sLat,$sLon&rtt=auto&z=14"
+        } else {
+            // Явный маршрут: место посадки → конечная точка
+            "yandexmaps://maps.yandex.ru/?rtext=$sLat,$sLon~$eLat,$eLon&rtt=auto&z=14"
+        }
+
+        val intent = Intent(Intent.ACTION_VIEW, routeUri.toUri()).apply {
+            setPackage("ru.yandex.yandexmaps")
+        }
+
+        // Fallback если Яндекс.Карты не установлены
+        if (intent.resolveActivity(context.packageManager) != null) {
+            context.startActivity(intent)
+        } else {
+            val webUri = routeUri
+                .replace("yandexmaps://maps.yandex.ru/", "https://maps.yandex.ru/")
+                .toUri()
+            context.startActivity(Intent(Intent.ACTION_VIEW, webUri))
         }
     }
 
@@ -192,6 +226,11 @@ fun DriverHomeScreen(navController: NavController) {
         activeOrderManager.loadActiveOrderForDriver()
     }
 
+    LaunchedEffect(true) {  // true — константа, срабатывает только один раз
+        Log.d(TAG, "Первый запуск экрана — загружаем активный заказ")
+        activeOrderManager.loadActiveOrderForDriver()
+    }
+
     LaunchedEffect(activeDriverOrder?.id) {
         activeDriverOrder?.let { order ->
             Log.d(TAG, "Активный заказ загружен: ${order.id}, статус: ${order.status}")
@@ -212,7 +251,7 @@ fun DriverHomeScreen(navController: NavController) {
 
             // Обновляем заказ и состояния
             driverViewModel.setCurrentOrder(order)
-            setupOrder(order)
+                //setupOrder(order)
 
             when (order.status) {
                 "ARRIVED" -> {
@@ -375,7 +414,7 @@ fun DriverHomeScreen(navController: NavController) {
                             }
                         )
                     }
-                    setupOrder(order)
+                   // setupOrder(order)
                 } catch (e: Exception) {
                     Log.e(TAG, "Ошибка принятия заказа", e)
                     Toast.makeText(context, "Не удалось принять заказ", Toast.LENGTH_SHORT).show()
@@ -545,6 +584,36 @@ fun DriverHomeScreen(navController: NavController) {
                                 )
                                 Text("Откуда: ${order.startAddress}")
                                 Text("Куда: ${order.endAddress}")
+
+                                Spacer(Modifier.height(8.dp))
+
+                                Button(
+                                    onClick = {
+                                        openYandexMapsNavigation(
+                                            context = context,
+                                            order = order,
+                                            isPickedUp = isPickedUp
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFFFC3F1D) // фирменный красный Яндекса
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.LocationOn,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = if (!isPickedUp) "Навигация к пассажиру" else "Навигация к цели",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
                                 Spacer(Modifier.height(16.dp))
                                 when {
                                     isPickedUp -> {
