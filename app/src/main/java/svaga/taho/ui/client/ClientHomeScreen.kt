@@ -47,6 +47,8 @@ import svaga.taho.data.remote.CreateOrderRequest
 import svaga.taho.di.AppModule
 import svaga.taho.ui.auth.AuthViewModel
 import svaga.taho.ui.menu.AppDrawerContent
+import svaga.taho.util.adaptiveDp
+import svaga.taho.util.adaptiveSp
 import kotlin.coroutines.resume
 
 private const val TAG = "ClientHomeScreen"
@@ -158,46 +160,6 @@ fun ClientHomeScreen(navController: NavController) {
             }
             driverName = order.driverName
             driverPhone = order.driverPhone
-
-            sseJob?.cancel()
-            sseJob = coroutineScope.launch {
-                sseClient.subscribe(
-                    order.id,
-                    token,
-                    coroutineScope,
-                    onUpdate = { json ->
-                        val status = json.optString("status", "")
-                        if (status.isNotEmpty()) {
-                            when (status) {
-                                "COMPLETED", "CANCELLED" -> {
-                                    currentStatus = if (status == "COMPLETED") "Поездка завершена" else "Заказ отменён"
-                                    showOrderDetails = false
-                                    isOrderPlaced = false
-                                    fromAddress = "Откуда"
-                                    toAddress = "Куда едем?"
-                                    orderTime = ""
-                                    driverName = null
-                                    driverPhone = null
-                                    activeOrderManager.clear()
-                                    sseClient.disconnect()
-                                }
-                                else -> {
-                                    currentStatus = when (status) {
-                                        "ACCEPTED", "PICKED_UP" -> "Заказ принят"
-                                        "ARRIVED" -> "Водитель на месте"
-                                        "IN_PROGRESS" -> "В пути"
-                                        "ASSIGNED" -> "Водитель назначен"
-                                        else -> "Статус: $status"
-                                    }
-                                }
-                            }
-                        }
-                        json.optString("driverName").takeIf { it.isNotBlank() }?.let { driverName = it }
-                        json.optString("driverPhone").takeIf { it.isNotBlank() }?.let { driverPhone = it }
-                    },
-                    onError = { Log.e("SSE", "Ошибка", it) }
-                )
-            }
         } ?: run {
             showOrderDetails = false
             isOrderPlaced = false
@@ -369,14 +331,14 @@ fun ClientHomeScreen(navController: NavController) {
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .padding(16.adaptiveDp())
                             .clickable { showOrderDetails = true },
                         colors = CardDefaults.cardColors(Color(0xFF1E88E5)),
-                        elevation = CardDefaults.cardElevation(8.dp)
+                        elevation = CardDefaults.cardElevation(8.adaptiveDp())
                     ) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text("Активный заказ", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            Spacer(Modifier.height(8.dp))
+                        Column(Modifier.padding(16.adaptiveDp())) {
+                            Text("Активный заказ", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.adaptiveSp())
+                            Spacer(Modifier.height(8.adaptiveDp()))
                             Text("От: $fromAddress", color = Color.White.copy(alpha = 0.9f))
                             Text("До: $toAddress", color = Color.White.copy(alpha = 0.9f))
                             Text("Статус: $currentStatus", color = Color.White)
@@ -390,7 +352,7 @@ fun ClientHomeScreen(navController: NavController) {
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .background(Color.White)
-                        .padding(16.dp)
+                        .padding(16.adaptiveDp())
                 ) {
                     if (showOrderDetails || (isOrderPlaced && activeOrder == null)) {
                         // ← Детали заказа (как было раньше)
@@ -398,19 +360,19 @@ fun ClientHomeScreen(navController: NavController) {
                             colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.padding(20.dp)) {
+                            Column(modifier = Modifier.padding(20.adaptiveDp())) {
                                 Text(
                                     text = "Заказ",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 20.sp
+                                    fontSize = 20.adaptiveSp()
                                 )
-                                Spacer(Modifier.height(12.dp))
+                                Spacer(Modifier.height(12.adaptiveDp()))
 
                                 // Живой статус с точкой
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(
                                         modifier = Modifier
-                                            .size(12.dp)
+                                            .size(12.adaptiveDp())
                                             .background(
                                                 color = when {
                                                     currentStatus.contains("Заказ принят") -> Color.Green
@@ -423,7 +385,7 @@ fun ClientHomeScreen(navController: NavController) {
                                                 shape = CircleShape
                                             )
                                     )
-                                    Spacer(Modifier.width(8.dp))
+                                    Spacer(Modifier.width(8.adaptiveDp()))
                                     Text(
                                         text = currentStatus,
                                         fontWeight = FontWeight.Medium,
@@ -435,14 +397,14 @@ fun ClientHomeScreen(navController: NavController) {
                                     )
                                 }
 
-                                Spacer(Modifier.height(16.dp))
+                                Spacer(Modifier.height(16.adaptiveDp()))
 
                                 driverName?.let { name ->
-                                    Text("Водитель: $name", fontWeight = FontWeight.Medium, fontSize = 18.sp)
+                                    Text("Водитель: $name", fontWeight = FontWeight.Medium, fontSize = 18.adaptiveSp())
                                 }
 
                                 driverPhone?.let { phone ->
-                                    Spacer(Modifier.height(4.dp))
+                                    Spacer(Modifier.height(4.adaptiveDp()))
                                     Text(
                                         text = "Телефон: $phone",
                                         color = Color.Blue,
@@ -453,7 +415,7 @@ fun ClientHomeScreen(navController: NavController) {
                                     )
                                 }
 
-                                Spacer(Modifier.height(16.dp))
+                                Spacer(Modifier.height(16.adaptiveDp()))
 
                                 Text("Откуда: $fromAddress")
                                 Text("Куда: $toAddress")
@@ -488,7 +450,7 @@ fun ClientHomeScreen(navController: NavController) {
                             }
                         }*/
 
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(12.adaptiveDp()))
 
                         // Поле Откуда
                         Column {
@@ -507,7 +469,7 @@ fun ClientHomeScreen(navController: NavController) {
                             )
 
                             if (focusedField == "from" && fromSuggestions.isNotEmpty()) {
-                                LazyColumn(modifier = Modifier.heightIn(max = 240.dp)) {
+                                LazyColumn(modifier = Modifier.heightIn(max = 240.adaptiveDp())) {
                                     items(fromSuggestions) { item ->
                                         val text = item.displayText ?: item.title.text
                                         Text(
@@ -521,8 +483,8 @@ fun ClientHomeScreen(navController: NavController) {
                                                     focusedField = null
                                                     focusManager.clearFocus()
                                                 }
-                                                .padding(12.dp),
-                                            fontSize = 16.sp
+                                                .padding(12.adaptiveDp()),
+                                            fontSize = 16.adaptiveSp()
                                         )
                                         HorizontalDivider()
                                     }
@@ -530,7 +492,7 @@ fun ClientHomeScreen(navController: NavController) {
                             }
                         }
 
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(12.adaptiveDp()))
 
                         // Поле Куда — ВОТ ЭТОТ БЛОК БЫЛ ПРОПУЩЕН
                         Column {
@@ -549,7 +511,7 @@ fun ClientHomeScreen(navController: NavController) {
                             )
 
                             if (focusedField == "to" && toSuggestions.isNotEmpty()) {
-                                LazyColumn(modifier = Modifier.heightIn(max = 240.dp)) {
+                                LazyColumn(modifier = Modifier.heightIn(max = 240.adaptiveDp())) {
                                     items(toSuggestions) { item ->
                                         val text = item.displayText ?: item.title.text
                                         Text(
@@ -563,8 +525,8 @@ fun ClientHomeScreen(navController: NavController) {
                                                     focusedField = null
                                                     focusManager.clearFocus()
                                                 }
-                                                .padding(12.dp),
-                                            fontSize = 16.sp
+                                                .padding(12.adaptiveDp()),
+                                            fontSize = 16.adaptiveSp()
                                         )
                                         HorizontalDivider()
                                     }
@@ -572,7 +534,7 @@ fun ClientHomeScreen(navController: NavController) {
                             }
                         }
 
-                        Spacer(Modifier.height(20.dp))
+                        Spacer(Modifier.height(20.adaptiveDp()))
 
                         // Кнопка Заказать
                         Button(
@@ -611,13 +573,44 @@ fun ClientHomeScreen(navController: NavController) {
                                         sseJob?.cancel()
                                         sseJob = coroutineScope.launch {
                                             sseClient.subscribe(
-                                                orderId,
-                                                token,
-                                                coroutineScope,
-                                                onUpdate = { /* ... как раньше ... */ },
-                                                onError = { Log.e("SSE", "Ошибка", it) }
+                                                orderId = orderId,
+                                                token = token,
+                                                scope = coroutineScope,
+                                                onUpdate = { json ->
+                                                    val status = json.optString("status", "")
+                                                    Log.d(TAG, "SSE onUpdate: $status")  // ← сначала убедись что сюда доходит
+                                                    if (status.isNotEmpty()) {
+                                                        when (status) {
+                                                            "COMPLETED", "CANCELLED" -> {
+                                                                currentStatus = if (status == "COMPLETED") "Поездка завершена" else "Заказ отменён"
+                                                                showOrderDetails = false
+                                                                isOrderPlaced = false
+                                                                fromAddress = "Откуда"
+                                                                toAddress = "Куда едем?"
+                                                                orderTime = ""
+                                                                driverName = null
+                                                                driverPhone = null
+                                                                activeOrderManager.clear()
+                                                                sseClient.disconnect()
+                                                            }
+                                                            else -> {
+                                                                currentStatus = when (status) {
+                                                                    "ACCEPTED", "PICKED_UP" -> "Заказ принят"
+                                                                    "ARRIVED"               -> "Водитель на месте"
+                                                                    "IN_PROGRESS"           -> "В пути"
+                                                                    "ASSIGNED"              -> "Водитель назначен"
+                                                                    else                    -> "Статус: $status"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    json.optString("driverName").takeIf { it.isNotBlank() }?.let { driverName = it }
+                                                    json.optString("driverPhone").takeIf { it.isNotBlank() }?.let { driverPhone = it }
+                                                },
+                                                onError = { Log.e(TAG, "SSE ошибка", it) }
                                             )
                                         }
+                                        showOrderDetails = true  // показываем карточку сразу после создания
 
                                         // ← Если хочешь сразу показать детали после создания
                                         // showOrderDetails = true   // раскомментируй, если нужно
@@ -630,13 +623,13 @@ fun ClientHomeScreen(navController: NavController) {
                             enabled = fromPoint != null && toPoint != null &&
                                     fromAddress != "Откуда" && fromAddress.isNotBlank() &&
                                     toAddress != "Куда едем?" && toAddress.isNotBlank(),
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
-                            shape = RoundedCornerShape(16.dp)
+                            modifier = Modifier.fillMaxWidth().height(56.adaptiveDp()),
+                            shape = RoundedCornerShape(16.adaptiveDp())
                         ) {
                             if (isOrderPlaced) {
-                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.adaptiveDp()))
                             } else {
-                                Text("Заказать такси", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text("Заказать такси", fontSize = 18.adaptiveSp(), fontWeight = FontWeight.Bold)
                             }
                         }
                     }
