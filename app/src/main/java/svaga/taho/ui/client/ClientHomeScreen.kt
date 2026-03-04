@@ -117,6 +117,7 @@ fun ClientHomeScreen(navController: NavController) {
     val authViewModel: AuthViewModel = hiltViewModel()
     val tokenManager: TokenManager = hiltViewModel<AuthViewModel>().tokenManager
 
+    val userRole by tokenManager.roleFlow.collectAsState(initial = "Загрузка ....")
     val userName by tokenManager.nameFlow.collectAsState(initial = "Загрузка...")
     val userPhone by tokenManager.phoneFlow.collectAsState(initial = "Загрузка...")
 
@@ -293,6 +294,7 @@ fun ClientHomeScreen(navController: NavController) {
                 authViewModel = authViewModel,
                 name = userName ?: "Имя не указано",
                 phone = userPhone ?: "Телефон не указан",
+                role = userRole ?: "",
                 onCloseDrawer = { scope.launch { drawerState.close() } }
             )
         },

@@ -47,6 +47,7 @@ fun AppDrawerContent(
     authViewModel: AuthViewModel = hiltViewModel(),
     name: String,
     phone: String,
+    role: String = "",
     onCloseDrawer: () -> Unit
 ) {
     val context = LocalContext.current
@@ -122,12 +123,14 @@ fun AppDrawerContent(
         )
 
         // Смена роли
-        ListItem(
-            headlineContent = { Text("Смена роли") },
-            modifier = Modifier.clickable {
-                showRoleChangeConfirm = true
-            }
-        )
+        if (role == "DRIVER") {
+            ListItem(
+                headlineContent = { Text("Смена роли") },
+                modifier = Modifier.clickable {
+                    showRoleChangeConfirm = true
+                }
+            )
+        }
 
         // Выйти из аккаунта
         ListItem(
