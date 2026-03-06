@@ -12,58 +12,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import kotlinx.coroutines.flow.collectLatest
+import svaga.taho.util.ui.PhoneVisualTransformation
 
-// ── Маска телефона +7 (XXX) XXX-XX-XX ────────────────────────────────────────
-
-/**
- * Хранит только цифры (без +7), форматирует для отображения.
- * Возвращает строку вида "+7 (999) 999-99-99".
- */
-private fun formatPhone(digits: String): String {
-    // Берём только первые 10 цифр после +7
-    val d = digits.take(10)
-    return buildString {
-        append("+7 ")
-        if (d.isEmpty()) return@buildString
-        append("(")
-        append(d.take(3))
-        if (d.length > 3) {
-            append(") ")
-            append(d.substring(3, minOf(6, d.length)))
-        }
-        if (d.length > 6) {
-            append("-")
-            append(d.substring(6, minOf(8, d.length)))
-        }
-        if (d.length > 8) {
-            append("-")
-            append(d.substring(8))
-        }
-    }
-}
-
-private class PhoneVisualTransformation : VisualTransformation {
-    override fun filter(text: AnnotatedString): TransformedText {
-        val formatted = formatPhone(text.text)
-        // Маппинг курсора: каждая цифра смещается на количество добавленных символов маски
-        val offsetMapping = object : OffsetMapping {
-            override fun originalToTransformed(offset: Int): Int {
-                val o = offset.coerceIn(0, text.text.length)
-                return when {
-                    o == 0  -> 3   // "+7 " = 3 символа
-                    o <= 3  -> o + 4   // "+7 ("
-                    o <= 6  -> o + 6   // "+7 (XXX) "
-                    o <= 8  -> o + 7   // "+7 (XXX) XXX-"
-                    o <= 10 -> o + 8   // "+7 (XXX) XXX-XX-"
-                    else    -> formatted.length
-                }
-            }
-            override fun transformedToOriginal(offset: Int): Int =
-                text.text.length.coerceAtMost(offset)
-        }
-        return TransformedText(AnnotatedString(formatted), offsetMapping)
-    }
-}
 
 // ── Валидация ──────────────────────────────────────────────────────────────────
 
@@ -152,11 +102,7 @@ fun RegisterScreen(
         OutlinedTextField(
             value = phoneDigits,
             onValueChange = { input ->
-                // Оставляем только цифры, первую 7 или 8 отбрасываем (пользователь вводит без кода)
-                val digits = input.filter { it.isDigit() }
-                    .let { if (it.startsWith("7") || it.startsWith("8")) it.drop(1) else it }
-                    .take(10)
-                phoneDigits = digits
+                phoneDigits = input.filter { it.isDigit() }.take(10)
             },
             label = { Text("Телефон") },
             placeholder = { Text("+7 (___) ___-__-__") },

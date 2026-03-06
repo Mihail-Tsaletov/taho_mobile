@@ -440,6 +440,7 @@ fun DriverHomeScreen(navController: NavController) {
         }
     }
 
+
     LaunchedEffect(currentOrder) {
         Log.d(TAG, "currentOrder изменился → ${currentOrder?.id} / ${currentOrder?.status}")
     }
@@ -460,7 +461,7 @@ fun DriverHomeScreen(navController: NavController) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Taho Driver") },
+                    title = { },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu")
@@ -477,8 +478,9 @@ fun DriverHomeScreen(navController: NavController) {
                 AndroidView(
                     factory = { ctx ->
                         MapView(ctx).apply {
-                            mapWindow.map.move(CameraPosition(Point(55.7558, 37.6173), 12f, 0f, 0f))
-                            mapObjects = mapWindow.map.mapObjects
+                            mapWindow.map.move(CameraPosition(Point(48.0397, 38.7697), 12f, 0f, 0f))
+                            mapWindow.map.mapObjects
+                            // Устанавливаем русский язык для подписей
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
@@ -506,7 +508,7 @@ fun DriverHomeScreen(navController: NavController) {
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
-                        if (driverBalance > BigDecimal.ZERO) {
+                        if (driverBalance >= BigDecimal.ZERO) {
                             Text(
                                 text = "${driverBalance.setScale(0, RoundingMode.HALF_UP)} ₽",
                                 color = Color.White.copy(alpha = 0.8f),
@@ -557,7 +559,16 @@ fun DriverHomeScreen(navController: NavController) {
                                         Text("Принять", color = Color(0xFFE91E63))
                                     }
                                     OutlinedButton(
-                                        onClick = { driverViewModel.setCurrentOrder(null) },
+                                        onClick = {
+                                            scope.launch {
+                                                try {
+                                                    apiService.cancelOrder("Bearer $token", order.id)
+                                                } catch (e: Exception) {
+                                                    Log.e(TAG, "Ошибка отклонения заказа", e)
+                                                }
+                                                driverViewModel.setCurrentOrder(null)
+                                            }
+                                        },
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         Text("Отклонить", color = Color.White)

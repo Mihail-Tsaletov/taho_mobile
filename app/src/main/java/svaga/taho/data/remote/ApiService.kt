@@ -44,6 +44,8 @@ interface ApiService {
     @POST("api/orders/{id}/accept")
     suspend fun acceptOrder(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
 
+    @POST("api/orders/{id}/cancel")
+    suspend fun cancelOrder(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
     @POST("api/orders/{id}/arrived")
     suspend fun driverArrived(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
 
@@ -74,6 +76,7 @@ interface ApiService {
         @Query("from") from: String? = null,
         @Query("to") to: String? = null
     ): List<OrderWeb>
+
 
 }
 

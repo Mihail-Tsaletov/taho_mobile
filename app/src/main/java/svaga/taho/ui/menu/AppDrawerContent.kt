@@ -71,7 +71,6 @@ fun AppDrawerContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
 
-            Text("TahoTaxi", style = MaterialTheme.typography.titleMedium)
 
             Spacer(Modifier.weight(1f)) // толкает кнопку вправо
 

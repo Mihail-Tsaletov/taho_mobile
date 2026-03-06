@@ -303,7 +303,7 @@ fun ClientHomeScreen(navController: NavController) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Taho Client") },
+                    title = {},
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(Icons.Default.Menu, contentDescription = "Меню")
@@ -316,7 +316,7 @@ fun ClientHomeScreen(navController: NavController) {
                 AndroidView(
                     factory = { ctx ->
                         MapView(ctx).apply {
-                            mapWindow.map.move(CameraPosition(Point(55.7558, 37.6173), 10f, 0f, 0f))
+                            mapWindow.map.move(CameraPosition(Point(48.0397, 38.7697), 12f, 0f, 0f))
                             mapWindow.map.addInputListener(mapInputListener)
                         }.also { mapViewState.value = it }
                     },
