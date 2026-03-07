@@ -543,8 +543,13 @@ fun DriverHomeScreen(navController: NavController) {
                                 Spacer(Modifier.height(12.dp))
                                 Text("Откуда: ${order.startAddress}", color = Color.White)
                                 Text("Куда: ${order.endAddress}", color = Color.White)
+                                Log.d(TAG, "Цена за поездку ==== ${order.price}")
                                 Text(
-                                    "Цена: ${order.price} ₽",
+                                    text = if (order.price.isNullOrBlank() || order.price == "null") {
+                                        "Цена: по таксометру"
+                                    } else {
+                                        "Цена: ${order.price} ₽"
+                                    },
                                     color = Color.White,
                                     fontSize = 20.sp,
                                     fontWeight = FontWeight.Bold
@@ -567,6 +572,8 @@ fun DriverHomeScreen(navController: NavController) {
                                                     Log.e(TAG, "Ошибка отклонения заказа", e)
                                                 }
                                                 driverViewModel.setCurrentOrder(null)
+                                                driverViewModel.resetOrderStates()
+                                                loadDriverProfile()
                                             }
                                         },
                                         modifier = Modifier.weight(1f)

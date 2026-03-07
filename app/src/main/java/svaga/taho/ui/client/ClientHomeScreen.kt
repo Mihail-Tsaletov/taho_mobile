@@ -144,15 +144,16 @@ fun ClientHomeScreen(navController: NavController) {
     LaunchedEffect(activeOrder) {
         activeOrder?.let { order ->
             Log.d(TAG, "Активный заказ загружен: ${order.id}")
-            showOrderDetails = false
+            // УБЕРИ эту строку:
+            // showOrderDetails = false  ← удали
             fromAddress = order.startAddress
             toAddress = order.endAddress
             isOrderPlaced = false
 
             currentStatus = when (order.status) {
                 "ACCEPTED", "PICKED_UP" -> "Заказ принят"
-                "ARRIVED" -> "Водитель на месте"
-                "IN_PROGRESS" -> "В пути"
+                "ARRIVED"               -> "Водитель на месте"
+                "IN_PROGRESS"           -> "В пути"
                 "COMPLETED", "CANCELLED" -> {
                     activeOrderManager.clear()
                     return@LaunchedEffect
@@ -162,7 +163,7 @@ fun ClientHomeScreen(navController: NavController) {
             driverName = order.driverName
             driverPhone = order.driverPhone
         } ?: run {
-            showOrderDetails = false
+            showOrderDetails = false  // сбрасываем только когда заказ пропал
             isOrderPlaced = false
             currentStatus = "В обработке"
             driverName = null
@@ -584,16 +585,24 @@ fun ClientHomeScreen(navController: NavController) {
                                                     if (status.isNotEmpty()) {
                                                         when (status) {
                                                             "COMPLETED", "CANCELLED" -> {
-                                                                currentStatus = if (status == "COMPLETED") "Поездка завершена" else "Заказ отменён"
-                                                                showOrderDetails = false
-                                                                isOrderPlaced = false
-                                                                fromAddress = "Откуда"
-                                                                toAddress = "Куда едем?"
-                                                                orderTime = ""
-                                                                driverName = null
-                                                                driverPhone = null
-                                                                activeOrderManager.clear()
-                                                                sseClient.disconnect()
+                                                                if (status == "COMPLETED") {
+                                                                    // Завершён — полный сброс
+                                                                    currentStatus = "Поездка завершена"
+                                                                    showOrderDetails = false
+                                                                    isOrderPlaced = false
+                                                                    fromAddress = "Откуда"
+                                                                    toAddress = "Куда едем?"
+                                                                    orderTime = ""
+                                                                    driverName = null
+                                                                    driverPhone = null
+                                                                    activeOrderManager.clear()
+                                                                    sseClient.disconnect()
+                                                                } else {
+                                                                    // Отменён — сбрасываем только статус и водителя, SSE остаётся
+                                                                    currentStatus = "В обработке"
+                                                                    driverName = null
+                                                                    driverPhone = null
+                                                                }
                                                             }
                                                             else -> {
                                                                 currentStatus = when (status) {

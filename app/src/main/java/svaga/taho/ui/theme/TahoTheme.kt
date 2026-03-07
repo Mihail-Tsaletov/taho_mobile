@@ -20,7 +20,7 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun TahoTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = false,             // ← всегда светлая
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme

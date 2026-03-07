@@ -10,7 +10,7 @@ data class DriverOrder(
     val endAddress: String,
     val passengerName: String,
     val passengerPhone: String,
-    val price: String,
+    val price: String? = null,
     val status: String,
     val distance: String,
     val inCity: Boolean
