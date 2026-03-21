@@ -31,13 +31,16 @@ class TokenManager @Inject constructor(
         private val LAST_MODE_DRIVER = booleanPreferencesKey("last_mode_driver")
         private val NAME_KEY = stringPreferencesKey("name")
         private val PHONE_KEY = stringPreferencesKey("phone")
+        private val ARRIVED_AT_KEY = longPreferencesKey("arrived_at_ms")// время прибытия (мс)
+        private val PAID_START_KEY = longPreferencesKey("paid_wait_start_ms")  // время начала платного ожидания (мс)
     }
 
     val roleFlow: Flow<String?> = dataStore.data.map { it[ROLE_KEY] }
     val lastModeDriverFlow: Flow<Boolean> = dataStore.data.map { it[LAST_MODE_DRIVER] ?: false }
     val nameFlow: Flow<String?> = dataStore.data.map { it[NAME_KEY] }
     val phoneFlow: Flow<String?> = dataStore.data.map { it[PHONE_KEY] }
-
+    val arrivedAtFlow: Flow<Long> = dataStore.data.map { it[ARRIVED_AT_KEY] ?: 0L }
+    val paidWaitStartFlow: Flow<Long> = dataStore.data.map { it[PAID_START_KEY] ?: 0L }
     val tokenFlow: Flow<String> = dataStore.data
         .map { it[TOKEN_KEY] ?: "" }
     val currentTokenValue: String
@@ -72,4 +75,16 @@ class TokenManager @Inject constructor(
     }
 
     suspend fun clear() = dataStore.edit { it.clear() }
+
+    suspend fun saveArrivedAt(timeMs: Long) {
+        dataStore.edit { it[ARRIVED_AT_KEY] = timeMs }
+    }
+
+    suspend fun savePaidWaitStart(timeMs: Long) { dataStore.edit { it[PAID_START_KEY] = timeMs } }
+
+    suspend fun clearTimers() {
+        dataStore.edit {
+            it.remove(ARRIVED_AT_KEY)
+            it.remove(PAID_START_KEY) }
+    }
 }

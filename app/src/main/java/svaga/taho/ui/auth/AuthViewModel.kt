@@ -55,8 +55,20 @@ class AuthViewModel @Inject constructor(
                 )
                 // После успешной регистрации — сразу логинимся
                 login(phone, password)
+            } catch (e: retrofit2.HttpException) {
+                val message = when (e.code()) {
+                    409 -> "Пользователь с таким номером уже зарегистрирован"
+                    400 -> "Проверьте правильность введённых данных"
+                    500 -> "Ошибка сервера, попробуйте позже"
+                    else -> "Ошибка: ${e.code()}"
+                }
+                _event.emit(AuthEvent.Error(message))
+            } catch (e: java.net.UnknownHostException) {
+                _event.emit(AuthEvent.Error("Нет подключения к интернету"))
+            } catch (e: java.net.SocketTimeoutException) {
+                _event.emit(AuthEvent.Error("Сервер не отвечает, попробуйте позже"))
             } catch (e: Exception) {
-                _event.emit(AuthEvent.Error(e.message ?: "Ошибка регистрации"))
+                _event.emit(AuthEvent.Error("Что-то пошло не так"))
             }
         }
     }
@@ -71,7 +83,7 @@ class AuthViewModel @Inject constructor(
                 val roleFromToken = parseJwtRole(response.token)
                     ?: throw IllegalStateException("Не удалось определить роль из токена")
 
-                // Че то хуйню набезорбазил, надо будет поменять ******************
+                // TODO Че то хуйню набезорбазил, надо будет поменять ******************
                 val token = response.token
                 val profile = api.getUserProfile("Bearer $token")
 
@@ -85,8 +97,21 @@ class AuthViewModel @Inject constructor(
                     "DRIVER" -> _event.emit(AuthEvent.ToRoleSelection)
                     else -> _event.emit(AuthEvent.Error("Неизвестная роль: $roleFromToken"))
                 }
+            } catch (e: retrofit2.HttpException) {
+                val message = when (e.code()) {
+                    401 -> "Неверный номер телефона или пароль"
+                    404 -> "Пользователь не найден"
+                    409 -> "Пользователь с таким номером уже существует"
+                    500 -> "Ошибка сервера, попробуйте позже"
+                    else -> "Ошибка: ${e.code()}"
+                }
+                _event.emit(AuthEvent.Error(message))
+            } catch (e: java.net.UnknownHostException) {
+                _event.emit(AuthEvent.Error("Нет подключения к интернету"))
+            } catch (e: java.net.SocketTimeoutException) {
+                _event.emit(AuthEvent.Error("Сервер не отвечает, попробуйте позже"))
             } catch (e: Exception) {
-                _event.emit(AuthEvent.Error(e.message ?: "Ошибка входа"))
+                _event.emit(AuthEvent.Error("Что-то пошло не так"))
             }
         }
     }

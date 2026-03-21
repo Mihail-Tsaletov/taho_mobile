@@ -45,6 +45,7 @@ import svaga.taho.ui.auth.AuthViewModel
 import svaga.taho.ui.menu.AppDrawerContentForDriver
 import svaga.taho.util.playNotificationSound
 import androidx.core.net.toUri
+import svaga.taho.util.WaitingState
 import svaga.taho.util.location.TrackManager
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -61,12 +62,18 @@ fun DriverHomeScreen(navController: NavController) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val authViewModel: AuthViewModel = hiltViewModel()
 
+    val waitingTimerManager = remember {
+        EntryPointAccessors.fromApplication(context.applicationContext, AppModule.ApiProvider::class.java).waitingTimerManager()
+    }
+
     val driverViewModel: DriverViewModel = hiltViewModel()
     val currentOrder by driverViewModel.currentOrder.collectAsState()
     val isArrived by driverViewModel.isArrived.collectAsState()
     val isPickedUp by driverViewModel.isPickedUp.collectAsState()
     val isTracking by driverViewModel.isTracking.collectAsState()
     val shouldTrack by driverViewModel.shouldTrack.collectAsState()
+    val waitingState by waitingTimerManager.state.collectAsState()
+    val paidEndTime by waitingTimerManager.paidEndTime.collectAsState()
 
     // СОСТОЯНИЯ
     var routePolyline by remember { mutableStateOf<PolylineMapObject?>(null) }
@@ -112,8 +119,12 @@ fun DriverHomeScreen(navController: NavController) {
         ).apiService()
     }
 
-    val carIcon = ImageProvider.fromResource(context, R.drawable.ic_car_driver)
-/**
+
+
+
+
+/**  val carIcon = ImageProvider.fromResource(context, R.drawable.ic_car_driver)
+
     // ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ — строит маршрут и анимацию
     fun setupOrder(order: DriverOrder) {
         val startPointLatLon = order.startPoint.split(",").let { Point(it[0].toDouble(), it[1].toDouble()) }
@@ -224,6 +235,16 @@ fun DriverHomeScreen(navController: NavController) {
 
     LaunchedEffect(Unit) {
         activeOrderManager.loadActiveOrderForDriver()
+    }
+
+    LaunchedEffect(isArrived) {
+        if (isArrived && !isPickedUp) {
+            waitingTimerManager.onArrived(scope)
+        }
+    }
+
+    LaunchedEffect(isPickedUp) {
+        if (isPickedUp) waitingTimerManager.reset()
     }
 
     LaunchedEffect(true) {  // true — константа, срабатывает только один раз
@@ -688,6 +709,56 @@ fun DriverHomeScreen(navController: NavController) {
                                         }
                                     }
                                     isArrived -> {
+                                        when (val ws = waitingState) {
+                                            is WaitingState.FreeWaiting -> {
+                                                val mins = ws.secondsLeft / 60
+                                                val secs = ws.secondsLeft % 60
+                                                Text(
+                                                    text = "Бесплатное ожидание: %02d:%02d".format(mins, secs),
+                                                    color = Color(0xFF4CAF50),
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 16.sp
+                                                )
+                                            }
+                                            is WaitingState.PaidWaiting -> {
+                                                val mins = ws.secondsElapsed / 60
+                                                val secs = ws.secondsElapsed % 60
+                                                Column {
+                                                    Text(
+                                                        text = "Платное ожидание: %02d:%02d".format(mins, secs),
+                                                        color = Color(0xFFFF9800),
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 16.sp
+                                                    )
+                                                    Text(
+                                                        text = "Максимум 15 минут",
+                                                        color = Color.Gray,
+                                                        fontSize = 12.sp
+                                                    )
+                                                }
+                                            }
+                                            is WaitingState.Expired -> {
+                                                LaunchedEffect(Unit) {
+                                                    try {
+                                                        // TODO: передать paidEndTime на сервер при завершении
+                                                        // apiService.driverComplete("Bearer $token", order.id, trackJson, paidEndTime)
+                                                        driverViewModel.resetOrderStates()
+                                                        waitingTimerManager.reset()
+                                                    } catch (e: Exception) {
+                                                        Log.e(TAG, "Ошибка автозавершения по таймеру", e)
+                                                    }
+                                                }
+                                                Text(
+                                                    text = "Ожидание истекло — заказ завершается",
+                                                    color = Color.Red,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 16.sp
+                                                )
+                                            }
+                                            else -> {}
+                                        }
+
+                                        Spacer(Modifier.height(12.dp))
                                         Button(
                                             onClick = {
                                                 scope.launch {
@@ -736,6 +807,7 @@ fun DriverHomeScreen(navController: NavController) {
                                                             order.id
                                                         )
                                                         driverViewModel.setArrived(true)
+                                                        scope.launch { waitingTimerManager.onArrived(scope) }
                                                     } catch (e: Exception) {
                                                         Log.e(TAG, "Ошибка прибытия", e)
                                                     }

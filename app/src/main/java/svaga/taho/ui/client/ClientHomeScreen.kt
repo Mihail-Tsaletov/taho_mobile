@@ -65,6 +65,18 @@ fun ClientHomeScreen(navController: NavController) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
+
+    val clientViewModel: ClientViewModel = hiltViewModel()
+    val currentStatus by clientViewModel.currentStatus.collectAsState()
+    val driverName by clientViewModel.driverName.collectAsState()
+    val driverPhone by clientViewModel.driverPhone.collectAsState()
+    val showOrderDetails by clientViewModel.showOrderDetails.collectAsState()
+    val completionState by clientViewModel.completionState.collectAsState()
+    val showCancelled by clientViewModel.showCancelled.collectAsState()
+    val showRejected by clientViewModel.showRejected.collectAsState()
+
+
+
     // Основные состояния заказа
     var fromAddress by remember { mutableStateOf("Откуда") }
     var toAddress   by remember { mutableStateOf("Куда едем?") }
@@ -73,10 +85,6 @@ fun ClientHomeScreen(navController: NavController) {
     var isOrderPlaced by remember { mutableStateOf(false) }
     var orderTime    by remember { mutableStateOf("") }
 
-    var showOrderDetails by remember { mutableStateOf(false) }
-    var currentStatus by remember { mutableStateOf("В обработке") }
-    var driverName   by remember { mutableStateOf<String?>(null) }
-    var driverPhone  by remember { mutableStateOf<String?>(null) }
 
     // Поиск по тексту (подсказки)
     var fromInput by remember { mutableStateOf("") }
@@ -150,24 +158,28 @@ fun ClientHomeScreen(navController: NavController) {
             toAddress = order.endAddress
             isOrderPlaced = false
 
-            currentStatus = when (order.status) {
-                "ACCEPTED", "PICKED_UP" -> "Заказ принят"
-                "ARRIVED"               -> "Водитель на месте"
-                "IN_PROGRESS"           -> "В пути"
+            when (order.status) {
+                "ACCEPTED", "PICKED_UP" -> clientViewModel.setStatus("Заказ принят")
+                "ARRIVED"               -> clientViewModel.setStatus("Водитель на месте")
+                "IN_PROGRESS"           -> {
+                    clientViewModel.setStatus("В пути")
+                    clientViewModel.onTripStarted()
+                }
                 "COMPLETED", "CANCELLED" -> {
                     activeOrderManager.clear()
                     return@LaunchedEffect
                 }
-                else -> currentStatus
+                "REJECTED" -> {
+                    clientViewModel.onOrderRejected()
+                    activeOrderManager.clear()
+                }
+                else -> {} // не трогаем статус
             }
-            driverName = order.driverName
-            driverPhone = order.driverPhone
+            clientViewModel.setDriverInfo(order.driverName, order.driverPhone)
+
         } ?: run {
-            showOrderDetails = false  // сбрасываем только когда заказ пропал
+            clientViewModel.resetOrderState()
             isOrderPlaced = false
-            currentStatus = "В обработке"
-            driverName = null
-            driverPhone = null
             sseJob?.cancel()
         }
     }
@@ -328,6 +340,7 @@ fun ClientHomeScreen(navController: NavController) {
                     }
                 )
 
+
                 // Карточка активного заказа сверху
                 if (activeOrder != null && !showOrderDetails) {
                     Card(
@@ -335,7 +348,7 @@ fun ClientHomeScreen(navController: NavController) {
                             .align(Alignment.TopCenter)
                             .fillMaxWidth()
                             .padding(16.adaptiveDp())
-                            .clickable { showOrderDetails = true },
+                            .clickable { clientViewModel.setShowOrderDetails(true) },
                         colors = CardDefaults.cardColors(Color(0xFF1E88E5)),
                         elevation = CardDefaults.cardElevation(8.adaptiveDp())
                     ) {
@@ -357,6 +370,158 @@ fun ClientHomeScreen(navController: NavController) {
                         .background(Color.White)
                         .padding(16.adaptiveDp())
                 ) {
+
+                    completionState?.let { completion ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(20.adaptiveDp()),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    "Поездка завершена",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 20.adaptiveSp(),
+                                    color = Color(0xFF4CAF50)
+                                )
+                                Spacer(Modifier.height(16.adaptiveDp()))
+                                completion.price?.let {
+                                    Text("Итого: $it ₽", fontWeight = FontWeight.Bold, fontSize = 24.adaptiveSp())
+                                    Spacer(Modifier.height(8.adaptiveDp()))
+                                }
+                                if (completion.durationStr.isNotEmpty()) {
+                                    Text(
+                                        "Время в пути: ${completion.durationStr}",
+                                        fontSize = 16.adaptiveSp(),
+                                        color = Color.Gray
+                                    )
+                                }
+                                Spacer(Modifier.height(20.adaptiveDp()))
+                                Button(
+                                    onClick = {
+                                        clientViewModel.dismissCompletion()
+                                        fromAddress = "Откуда"
+                                        toAddress = "Куда едем?"
+                                        orderTime = ""
+                                        isOrderPlaced = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
+                                ) {
+                                    Text("Закрыть", color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                        return@Column  // не рендерим остальное пока показываем экран завершения
+                    }
+
+                    if (showCancelled) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3F3)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(20.adaptiveDp()),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    "Заказ отменён",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 20.adaptiveSp(),
+                                    color = Color(0xFFE53935)
+                                )
+                                Spacer(Modifier.height(8.adaptiveDp()))
+
+                                Text(
+                                    "Вы можете сделать новый заказ или связаться с оператором",
+                                    fontSize = 14.adaptiveSp(),
+                                    color = Color.Gray
+                                )
+                                Spacer(Modifier.height(20.adaptiveDp()))
+                                Button(
+                                    onClick = {
+                                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:+71234567890"))
+                                        context.startActivity(intent)
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF757575))
+                                ) {
+                                    Text("Связаться с оператором", color = Color.White)
+                                }
+                                Spacer(Modifier.height(8.adaptiveDp()))
+                                Button(
+                                            onClick = {
+                                        clientViewModel.dismissCancelled()
+                                        fromAddress = "Откуда"
+                                        toAddress = "Куда едем?"
+                                        orderTime = ""
+                                        isOrderPlaced = false
+                                    },
+
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
+
+                                ) {
+                                    Text("Закрыть", color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                        return@Column
+                    }
+
+                    if (showRejected) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3F3)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(20.adaptiveDp()),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    "Заказ отклонён менеджером",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 20.adaptiveSp(),
+                                    color = Color(0xFFE53935)
+                                )
+                                Spacer(Modifier.height(8.adaptiveDp()))
+                                Text(
+                                    "Ваш заказ был отменён менеджером. Для уточнения деталей свяжитесь с оператором.",
+                                    fontSize = 14.adaptiveSp(),
+                                    color = Color.Gray
+                                )
+                                Spacer(Modifier.height(20.adaptiveDp()))
+                                Button(
+                                    onClick = {
+                                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:+71234567890"))  //TODO Исправить везде номер телефона манагера
+                                        context.startActivity(intent)
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF757575))
+                                ) {
+                                    Text("Связаться с оператором", color = Color.White)
+                                }
+                                Spacer(Modifier.height(8.adaptiveDp()))
+                                Button(
+                                    onClick = {
+                                        clientViewModel.dismissRejected()
+                                        fromAddress = "Откуда"
+                                        toAddress = "Куда едем?"
+                                        orderTime = ""
+                                        isOrderPlaced = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
+                                ) {
+                                    Text("Закрыть", color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                        return@Column
+                    }
+
                     if (showOrderDetails || (isOrderPlaced && activeOrder == null)) {
                         // ← Детали заказа (как было раньше)
                         Card(
@@ -581,47 +746,45 @@ fun ClientHomeScreen(navController: NavController) {
                                                 scope = coroutineScope,
                                                 onUpdate = { json ->
                                                     val status = json.optString("status", "")
-                                                    Log.d(TAG, "SSE onUpdate: $status")  // ← сначала убедись что сюда доходит
+                                                    Log.d(TAG, "SSE onUpdate: $status")
                                                     if (status.isNotEmpty()) {
                                                         when (status) {
-                                                            "COMPLETED", "CANCELLED" -> {
-                                                                if (status == "COMPLETED") {
-                                                                    // Завершён — полный сброс
-                                                                    currentStatus = "Поездка завершена"
-                                                                    showOrderDetails = false
-                                                                    isOrderPlaced = false
-                                                                    fromAddress = "Откуда"
-                                                                    toAddress = "Куда едем?"
-                                                                    orderTime = ""
-                                                                    driverName = null
-                                                                    driverPhone = null
-                                                                    activeOrderManager.clear()
-                                                                    sseClient.disconnect()
-                                                                } else {
-                                                                    // Отменён — сбрасываем только статус и водителя, SSE остаётся
-                                                                    currentStatus = "В обработке"
-                                                                    driverName = null
-                                                                    driverPhone = null
-                                                                }
+                                                            "COMPLETED" -> {
+                                                                val price = json.optString("price").takeIf { it.isNotBlank() }
+                                                                clientViewModel.onTripCompleted(price)  // ← всё состояние в ViewModel
+                                                                activeOrderManager.clear()
+                                                                sseClient.disconnect()
+                                                                // fromAddress, toAddress, orderTime НЕ трогаем здесь
+                                                            }
+                                                            "CANCELLED" -> {
+                                                                clientViewModel.onOrderCancelled()
+                                                                activeOrderManager.clear()
                                                             }
                                                             else -> {
-                                                                currentStatus = when (status) {
-                                                                    "ACCEPTED", "PICKED_UP" -> "Заказ принят"
-                                                                    "ARRIVED"               -> "Водитель на месте"
-                                                                    "IN_PROGRESS"           -> "В пути"
-                                                                    "ASSIGNED"              -> "Водитель назначен"
-                                                                    else                    -> "Статус: $status"
+                                                                when (status) {
+                                                                    "ACCEPTED", "PICKED_UP" -> clientViewModel.setStatus("Заказ принят")
+                                                                    "ARRIVED"               -> clientViewModel.setStatus("Водитель на месте")
+                                                                    "IN_PROGRESS"           -> {
+                                                                        clientViewModel.setStatus("В пути")
+                                                                        clientViewModel.onTripStarted()
+                                                                    }
+                                                                    "ASSIGNED"              -> clientViewModel.setStatus("Водитель назначен")
+                                                                    else                    -> clientViewModel.setStatus("Статус: $status")
                                                                 }
                                                             }
                                                         }
                                                     }
-                                                    json.optString("driverName").takeIf { it.isNotBlank() }?.let { driverName = it }
-                                                    json.optString("driverPhone").takeIf { it.isNotBlank() }?.let { driverPhone = it }
+                                                    json.optString("driverName").takeIf { it.isNotBlank() }?.let {
+                                                        clientViewModel.setDriverInfo(it, driverPhone)
+                                                    }
+                                                    json.optString("driverPhone").takeIf { it.isNotBlank() }?.let {
+                                                        clientViewModel.setDriverInfo(driverName, it)
+                                                    }
                                                 },
                                                 onError = { Log.e(TAG, "SSE ошибка", it) }
                                             )
                                         }
-                                        showOrderDetails = true  // показываем карточку сразу после создания
+                                        clientViewModel.setShowOrderDetails(true)
 
                                         // ← Если хочешь сразу показать детали после создания
                                         // showOrderDetails = true   // раскомментируй, если нужно

@@ -17,6 +17,7 @@ datastore = "1.1.1"
 yandexMapkit = "4.19.0-full"
 ksp = "2.0.20-1.0.25"   # важно!
 dagger-hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+remoteCreationCore = "1.0.0-alpha06"
 
 
 [libraries]
@@ -44,6 +45,7 @@ yandex-mapkit = { group = "com.yandex.android", name = "mapkit", version.ref = "
 junit = { group = "junit", name = "junit", version = "4.13.2" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version = "1.2.1" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version = "3.6.1" }
+androidx-compose-remote-creation-core = { group = "androidx.compose.remote", name = "remote-creation-core", version.ref = "remoteCreationCore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
