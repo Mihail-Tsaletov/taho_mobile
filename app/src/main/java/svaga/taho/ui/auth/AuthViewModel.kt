@@ -31,6 +31,18 @@ class AuthViewModel @Inject constructor(
     private val _currentToken = MutableStateFlow<String?>(null)
     val currentToken: StateFlow<String?> = _currentToken.asStateFlow()
 
+    private val _showCodeDialog = MutableStateFlow(false)
+    val showCodeDialog: StateFlow<Boolean> = _showCodeDialog.asStateFlow()
+
+    private val _verificationPhone = MutableStateFlow<String?>(null)
+    val verificationPhone: StateFlow<String?> = _verificationPhone.asStateFlow()
+
+    private val _isCodeVerified = MutableStateFlow(false)
+    val isCodeVerified: StateFlow<Boolean> = _isCodeVerified.asStateFlow()
+
+    private val _verificationCode = MutableStateFlow("")           // ← важно!
+    val verificationCode: StateFlow<String> = _verificationCode.asStateFlow()
+
     sealed class AuthEvent {
         object ToRegister : AuthEvent()
         object ToLogin : AuthEvent()
@@ -41,7 +53,77 @@ class AuthViewModel @Inject constructor(
         object Loading : AuthEvent()
     }
 
-    fun register(phone: String, name: String, password: String) {
+
+    fun verifyTelegramCode(code: String) {
+        _verificationCode.value = code
+
+        if (code.length == 6) {
+            viewModelScope.launch {
+                _isCodeVerified.value = true
+                _showCodeDialog.value = false
+                _event.emit(AuthEvent.Error("Номер успешно подтверждён ✓"))
+                // TODO: здесь реальная проверка кода через API
+            }
+        }
+    }
+
+    fun sendTelegramCode(phone: String) {
+        viewModelScope.launch {
+            _event.emit(AuthEvent.Loading)
+            try {
+                val response = api.sendTelegramCode(mapOf("phone" to phone))
+                if (response.isSuccessful) {
+                    _verificationPhone.value = phone
+                    _showCodeDialog.value = true
+                    _verificationCode.value = ""
+                    _isCodeVerified.value = false
+                    _event.emit(AuthEvent.Error("Код отправлен в Telegram"))
+                } else {
+                    _event.emit(AuthEvent.Error("Не удалось отправить код"))
+                }
+            } catch (e: Exception) {
+                _event.emit(AuthEvent.Error("Ошибка отправки кода"))
+            }
+        }
+    }
+
+    fun register(
+        phone: String,
+        name: String,
+        password: String,
+        code: String
+    ) {
+        viewModelScope.launch {
+            _event.emit(AuthEvent.Loading)
+            try {
+                val response = api.register(
+                    RegisterRequest(
+                        phone = phone,
+                        code = code,
+                        name = name,
+                        password = password,
+                        role = "CLIENT"
+                    )
+                )
+
+                // После успешной регистрации сразу логинимся
+                login(phone, password)
+
+            } catch (e: retrofit2.HttpException) {
+                val message = when (e.code()) {
+                    400 -> "Неверный или просроченный код подтверждения"
+                    409 -> "Пользователь с таким номером уже зарегистрирован"
+                    500 -> "Ошибка сервера, попробуйте позже"
+                    else -> "Ошибка: ${e.code()}"
+                }
+                _event.emit(AuthEvent.Error(message))
+            } catch (e: Exception) {
+                _event.emit(AuthEvent.Error("Что-то пошло не так"))
+            }
+        }
+    }
+
+    /*fun register(phone: String, name: String, password: String) {
         viewModelScope.launch {
             _event.emit(AuthEvent.Loading)
             try {
@@ -71,7 +153,7 @@ class AuthViewModel @Inject constructor(
                 _event.emit(AuthEvent.Error("Что-то пошло не так"))
             }
         }
-    }
+    }*/
 
     fun login(phone: String, password: String) {
         viewModelScope.launch {

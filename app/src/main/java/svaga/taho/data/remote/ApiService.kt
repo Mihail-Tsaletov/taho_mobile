@@ -17,7 +17,10 @@ import java.time.format.DateTimeFormatter
 interface ApiService {
 
     @POST("api/auth/register")
-    suspend fun register(@Body request: RegisterRequest): Any // можно Unit или твой ответ
+    suspend fun register(@Body request: RegisterRequest): Any
+
+    @POST("api/auth/send-telegram-code")
+    suspend fun sendTelegramCode(@Body body: Map<String, String>): Response<Unit>
 
     @POST("api/auth/login")
     suspend fun login(@Body request: LoginRequest): LoginResponse
@@ -104,8 +107,9 @@ data class CreateOrderRequest(
 data class RegisterRequest(
     val phone: String,
     val name: String,
-    val password: String, // если нужно
-    val role: String // если нужно
+    val password: String,
+    val role: String,
+    val code: String
 )
 
 data class LoginRequest(
