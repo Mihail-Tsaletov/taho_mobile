@@ -8,8 +8,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 
 data class TripCompletionState(
-    val price: String?,
-    val durationStr: String
+    val price: String? = null,
+    val durationStr: String = "",
+    val startAddress: String = "",
+    val endAddress: String = ""
 )
 
 @HiltViewModel
@@ -73,9 +75,15 @@ class ClientViewModel @Inject constructor() : ViewModel() {
         val secs = ((durationMs % 60000) / 1000).toInt()
         val durationStr = if (mins > 0) "$mins мин $secs сек" else "$secs сек"
 
+        val finalPrice = when {
+            price?.isNotBlank() == true -> price
+            else -> "Цена не указана"   // или "По тарифу" если хочешь
+        }
+
         _completionState.value = TripCompletionState(
-            price = price,
+            price = finalPrice,
             durationStr = durationStr
+            // startAddress и endAddress можно оставить пустыми, раз не нужны
         )
     }
 

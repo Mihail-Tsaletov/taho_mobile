@@ -166,8 +166,23 @@ fun ClientHomeScreen(navController: NavController) {
                     clientViewModel.onTripStarted()
                 }
                 "COMPLETED", "CANCELLED" -> {
-                    activeOrderManager.clear()
-                    return@LaunchedEffect
+                    // ← Сначала перезагружаем заказ, чтобы получить свежие данные (включая цену)
+                    coroutineScope.launch {
+                        activeOrderManager.loadActiveOrderForClient()
+                        // Даём небольшое время на обновление StateFlow
+                        delay(300)
+
+                        val finalPrice = activeOrder?.price?.takeIf { it.isNotBlank() }
+                            ?: "По тарифу"
+
+                        Log.d(
+                            TAG,
+                            "LaunchedEffect COMPLETED → price после reload: $finalPrice | activeOrder: $activeOrder"
+                        )
+
+                        clientViewModel.onTripCompleted(finalPrice)
+                        activeOrderManager.clear()
+                    }
                 }
                 "REJECTED" -> {
                     clientViewModel.onOrderRejected()
@@ -387,10 +402,13 @@ fun ClientHomeScreen(navController: NavController) {
                                     color = Color(0xFF4CAF50)
                                 )
                                 Spacer(Modifier.height(16.adaptiveDp()))
-                                completion.price?.let {
-                                    Text("Итого: $it ₽", fontWeight = FontWeight.Bold, fontSize = 24.adaptiveSp())
-                                    Spacer(Modifier.height(8.adaptiveDp()))
-                                }
+                                Text(
+                                    "Итого: ${completion.price} ₽",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 28.adaptiveSp(),
+                                    color = Color(0xFF2E7D32)
+                                )
+
                                 if (completion.durationStr.isNotEmpty()) {
                                     Text(
                                         "Время в пути: ${completion.durationStr}",
@@ -750,11 +768,21 @@ fun ClientHomeScreen(navController: NavController) {
                                                     if (status.isNotEmpty()) {
                                                         when (status) {
                                                             "COMPLETED" -> {
-                                                                val price = json.optString("price").takeIf { it.isNotBlank() }
-                                                                clientViewModel.onTripCompleted(price)  // ← всё состояние в ViewModel
-                                                                activeOrderManager.clear()
-                                                                sseClient.disconnect()
-                                                                // fromAddress, toAddress, orderTime НЕ трогаем здесь
+                                                                coroutineScope.launch {
+                                                                    // Перезагружаем заказ перед очисткой
+                                                                    activeOrderManager.loadActiveOrderForClient()
+                                                                    delay(300)
+
+                                                                    val finalPrice = json.optString("price").takeIf { it.isNotBlank() }
+                                                                        ?: activeOrder?.price?.takeIf { it.isNotBlank() }
+                                                                        ?: "По тарифу"
+
+                                                                    Log.d(TAG, "SSE COMPLETED → price после reload: $finalPrice | json: $json | activeOrder.price: ${activeOrder?.price}")
+
+                                                                    clientViewModel.onTripCompleted(finalPrice)
+                                                                    activeOrderManager.clear()
+                                                                    sseClient.disconnect()
+                                                                }
                                                             }
                                                             "CANCELLED" -> {
                                                                 clientViewModel.onOrderCancelled()

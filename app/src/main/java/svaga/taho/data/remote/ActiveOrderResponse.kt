@@ -4,5 +4,6 @@ data class ActiveOrderResponse(
     val endAddress: String,
     val status: String,
     val driverName: String? = null,
-    val driverPhone: String? = null
+    val driverPhone: String? = null,
+    val price: String? = null
 )

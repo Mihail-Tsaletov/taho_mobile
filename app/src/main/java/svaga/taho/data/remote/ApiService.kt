@@ -80,6 +80,12 @@ interface ApiService {
         @Query("to") to: String? = null
     ): List<OrderWeb>
 
+    @POST("api/orders/createByDriver")
+    suspend fun createOrderByDriver(
+        @Header("Authorization") token: String,
+        @Body request: CreateOrderRequest
+    ): Response<ResponseBody>
+
 
 }
 

@@ -8,8 +8,10 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
@@ -17,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -45,10 +48,24 @@ import svaga.taho.ui.auth.AuthViewModel
 import svaga.taho.ui.menu.AppDrawerContentForDriver
 import svaga.taho.util.playNotificationSound
 import androidx.core.net.toUri
+import com.yandex.mapkit.geometry.BoundingBox
+import com.yandex.mapkit.search.SearchFactory
+import com.yandex.mapkit.search.SearchManagerType
+import com.yandex.mapkit.search.SuggestItem
+import com.yandex.mapkit.search.SuggestOptions
+import com.yandex.mapkit.search.SuggestResponse
+import com.yandex.mapkit.search.SuggestSession
 import svaga.taho.util.WaitingState
 import svaga.taho.util.location.TrackManager
 import java.math.BigDecimal
 import java.math.RoundingMode
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.focus.onFocusChanged
+import svaga.taho.data.remote.CreateOrderRequest
 
 private const val TAG = "DriverHomeScreen"
 var sseJob by mutableStateOf<Job?>(null)
@@ -85,6 +102,22 @@ fun DriverHomeScreen(navController: NavController) {
     var newOrdersSseJob by remember { mutableStateOf<Job?>(null) }
     var orderUpdatesSseJob by remember { mutableStateOf<Job?>(null) }
     var driverBalance by remember { mutableStateOf<BigDecimal>(BigDecimal.ZERO) }
+
+    var showCreateOrderSheet by remember { mutableStateOf(false) }
+    var createFromAddress by remember { mutableStateOf("") }
+    var createToAddress by remember { mutableStateOf("") }
+    var createFromPoint by remember { mutableStateOf<Point?>(null) }
+    var createToPoint by remember { mutableStateOf<Point?>(null) }
+    var createFromSuggestions by remember { mutableStateOf<List<SuggestItem>>(emptyList()) }
+    var createToSuggestions by remember { mutableStateOf<List<SuggestItem>>(emptyList()) }
+    var createFocusedField by remember { mutableStateOf<String?>(null) }
+    var isCreatingOrder by remember { mutableStateOf(false) }
+
+    val createSuggestSession = remember {
+        SearchFactory.getInstance()
+            .createSearchManager(SearchManagerType.COMBINED)
+            .createSuggestSession()
+    }
 
     val sseClient = remember {
         EntryPointAccessors.fromApplication(
@@ -316,6 +349,26 @@ fun DriverHomeScreen(navController: NavController) {
                 driverViewModel.resetOrderStates()
             }
         }
+    }
+
+    LaunchedEffect(createFromAddress, createFocusedField) {
+        val box = BoundingBox(Point(41.0, 19.0), Point(74.0, 180.0))
+        if (createFocusedField == "from" && createFromAddress.length > 2) {
+            createSuggestSession.suggest(createFromAddress, box, SuggestOptions(), object : SuggestSession.SuggestListener {
+                override fun onResponse(response: SuggestResponse) { createFromSuggestions = response.items.take(6) }
+                override fun onError(error: com.yandex.runtime.Error) { createFromSuggestions = emptyList() }
+            })
+        } else createFromSuggestions = emptyList()
+    }
+
+    LaunchedEffect(createToAddress, createFocusedField) {
+        val box = BoundingBox(Point(41.0, 19.0), Point(74.0, 180.0))
+        if (createFocusedField == "to" && createToAddress.length > 2) {
+            createSuggestSession.suggest(createToAddress, box, SuggestOptions(), object : SuggestSession.SuggestListener {
+                override fun onResponse(response: SuggestResponse) { createToSuggestions = response.items.take(6) }
+                override fun onError(error: com.yandex.runtime.Error) { createToSuggestions = emptyList() }
+            })
+        } else createToSuggestions = emptyList()
     }
     // Функция загрузки профиля
     suspend fun loadDriverProfile() {
@@ -818,6 +871,157 @@ fun DriverHomeScreen(navController: NavController) {
                                             Text("Я на месте")
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (currentOrder == null) {
+                    FloatingActionButton(
+                        onClick = { showCreateOrderSheet = true },
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(16.dp),
+                        containerColor = Color(0xFF4CAF50),
+                        contentColor = Color.White
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Создать заказ",
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+
+// Модалка создания заказа
+                if (showCreateOrderSheet) {
+                    ModalBottomSheet(
+                        onDismissRequest = { showCreateOrderSheet = false }
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                                .navigationBarsPadding()
+                        ) {
+                            Text(
+                                "Создать заказ",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp
+                            )
+                            Spacer(Modifier.height(16.dp))
+
+                            // Поле Откуда
+                            OutlinedTextField(
+                                value = createFromAddress,
+                                onValueChange = { createFromAddress = it },
+                                label = { Text("Откуда") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .onFocusChanged { if (it.isFocused) createFocusedField = "from" },
+                                singleLine = true
+                            )
+                            if (createFocusedField == "from" && createFromSuggestions.isNotEmpty()) {
+                                LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                                    items(createFromSuggestions) { item ->
+                                        val text = item.displayText ?: item.title.text
+                                        Text(
+                                            text = text,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    createFromAddress = text
+                                                    createFromPoint = item.center
+                                                    createFocusedField = null
+                                                }
+                                                .padding(12.dp)
+                                        )
+                                        HorizontalDivider()
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(12.dp))
+
+                            // Поле Куда
+                            OutlinedTextField(
+                                value = createToAddress,
+                                onValueChange = { createToAddress = it },
+                                label = { Text("Куда") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .onFocusChanged { if (it.isFocused) createFocusedField = "to" },
+                                singleLine = true
+                            )
+                            if (createFocusedField == "to" && createToSuggestions.isNotEmpty()) {
+                                LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                                    items(createToSuggestions) { item ->
+                                        val text = item.displayText ?: item.title.text
+                                        Text(
+                                            text = text,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    createToAddress = text
+                                                    createToPoint = item.center
+                                                    createFocusedField = null
+                                                }
+                                                .padding(12.dp)
+                                        )
+                                        HorizontalDivider()
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(20.dp))
+
+                            Button(
+                                onClick = {
+                                    scope.launch {
+                                        isCreatingOrder = true
+                                        try {
+                                            val startStr = createFromPoint?.let { "${it.longitude}, ${it.latitude}" } ?: ""
+                                            val endStr = createToPoint?.let { "${it.longitude}, ${it.latitude}" } ?: ""
+                                            val response = apiService.createOrderByDriver(
+                                                "Bearer $token",
+                                                CreateOrderRequest(
+                                                    startPoint = startStr,
+                                                    endPoint = endStr,
+                                                    startAddress = createFromAddress,
+                                                    endAddress = createToAddress
+                                                )
+                                            )
+
+                                            if (!response.isSuccessful) {
+                                                val error = response.errorBody()?.string()
+                                                throw Exception("Ошибка сервера: ${response.code()} $error")
+                                            }
+
+                                            Log.d(TAG, "Order created: ${response.body()}")
+                                            showCreateOrderSheet = false
+                                            createFromAddress = ""
+                                            createToAddress = ""
+                                            createFromPoint = null
+                                            createToPoint = null
+                                            Toast.makeText(context, "Заказ создан", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "Ошибка создания заказа", e)
+                                            Toast.makeText(context, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        } finally {
+                                            isCreatingOrder = false
+                                        }
+                                    }
+                                },
+                                enabled = createFromPoint != null && createToPoint != null && !isCreatingOrder,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                if (isCreatingOrder) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = Color.White
+                                    )
+                                } else {
+                                    Text("Создать заказ")
                                 }
                             }
                         }
