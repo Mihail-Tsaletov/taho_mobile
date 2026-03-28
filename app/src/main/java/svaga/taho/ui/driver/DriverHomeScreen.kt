@@ -112,6 +112,10 @@ fun DriverHomeScreen(navController: NavController) {
     var createToSuggestions by remember { mutableStateOf<List<SuggestItem>>(emptyList()) }
     var createFocusedField by remember { mutableStateOf<String?>(null) }
     var isCreatingOrder by remember { mutableStateOf(false) }
+    var queuePosition by remember { mutableStateOf(0) }
+    var parkName by remember { mutableStateOf<String?>(null) }
+
+
 
     val createSuggestSession = remember {
         SearchFactory.getInstance()
@@ -229,6 +233,16 @@ fun DriverHomeScreen(navController: NavController) {
                                 return@subscribe
                             }
                             Log.d(TAG, "Обрабатываем новый заказ как свободный!")
+
+
+                            val myPosition = json.optInt("myPosition", -1)
+                            if (myPosition > 0) {
+                                // обновляем позицию в очереди
+                                queuePosition = myPosition
+                            } else if (myPosition == 0) {
+                                queuePosition = 0
+                            }
+
                             // дальше весь твой код парсинга DriverOrder
                             val order = DriverOrder(
                                 id = json.getString("id"),
@@ -378,6 +392,15 @@ fun DriverHomeScreen(navController: NavController) {
             driverStatus = profile.status
             tokenManager.saveDriverId(profile.driverId)
             driverBalance = profile.balance  // ← берём баланс
+            parkName = when (profile.parkId) {
+                1 -> "Черема"
+                2 -> "Город"
+                else -> null
+            }
+            if (profile.status == "OFFLINE" || profile.parkId == null) {
+                parkName = null
+            }
+
         } catch (e: Exception) {
             Log.e(TAG, "Ошибка загрузки профиля", e)
             driverName = "Ошибка получения имени"
@@ -502,15 +525,18 @@ fun DriverHomeScreen(navController: NavController) {
     }
 
     // Функция смены статуса
-    suspend fun toggleStatus() {
+    suspend fun toggleStatus(parkId: Int? = null)  {
         if (driverStatus in listOf("BUSY", "ASSIGNED", "IN_PROGRESS")) {
             Log.d(TAG, "Нельзя менять статус во время заказа: $driverStatus")
             return
         }
-        val response = apiService.toggleOnlineStatus("Bearer $token")
+        val response = apiService.toggleOnlineStatus("Bearer $token", parkId)
         if (response.isSuccessful) {
             val newStatus = response.body()?.string()?.trim() ?: driverStatus
             driverStatus = newStatus
+
+            delay(500)
+            loadDriverProfile()
         }
     }
 
@@ -571,7 +597,7 @@ fun DriverHomeScreen(navController: NavController) {
                         .clip(CircleShape)
                         .background(statusColor)
                         .clickable(enabled = statusClickable) { showStatusSheet = true }
-                        .padding(horizontal = 20.dp, vertical = 8.dp)
+                        .padding(horizontal = 35.dp, vertical = 8.dp)
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -589,8 +615,31 @@ fun DriverHomeScreen(navController: NavController) {
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium
                             )
+
+                            when {
+                                currentOrder != null -> {
+                                    Text(text = "🚗 В заказе", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+                                }
+                                queuePosition > 0 -> {
+                                    Text(
+                                        text = "Очередь: $queuePosition",
+                                        color = Color.White.copy(alpha = 0.9f),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    parkName?.let {
+                                        Text(
+                                            text = it,
+                                            color = Color.White.copy(alpha = 0.7f),
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
+
+
 
                 }
 

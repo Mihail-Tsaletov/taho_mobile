@@ -70,7 +70,10 @@ interface ApiService {
     suspend fun getDriverProfile(@Header("Authorization") token: String): DriverProfileResponse
 
     @POST("api/users/getOnLine")
-    suspend fun toggleOnlineStatus(@Header("Authorization") token: String): Response<ResponseBody>
+    suspend fun toggleOnlineStatus(
+        @Header("Authorization") token: String,
+        @Query("parkId") parkId: Int? = null
+    ): Response<ResponseBody>
 
     @GET("api/orders/getAllOrdersByDriverId")
     suspend fun getOrdersByDriverId(
@@ -138,7 +141,8 @@ data class DriverProfileResponse(
     val name: String,
     val phoneNumber: String,
     val status: String,
-    val balance: BigDecimal
+    val balance: BigDecimal,
+    val parkId: Int? = null
 )
 
 
