@@ -18,7 +18,7 @@ fun DriverStatusBottomSheet(
     driverName: String,
     driverStatus: String,
     driverBalance: BigDecimal,
-    onToggleStatus: suspend (parkId: Int?) -> Unit,  // ← parkId: 1=Черема, 2=Город, null=уход с линии
+    onToggleStatus: suspend (parkingId: Int?) -> Unit,  // ← parkId: 1=Черема, 2=Город, null=уход с линии
     onDismiss: () -> Unit
 ) {
     val scope = rememberCoroutineScope()

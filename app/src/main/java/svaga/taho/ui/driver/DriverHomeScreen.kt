@@ -525,18 +525,32 @@ fun DriverHomeScreen(navController: NavController) {
     }
 
     // Функция смены статуса
-    suspend fun toggleStatus(parkId: Int? = null)  {
+    suspend fun toggleStatus(parkId: Int? = null) {
         if (driverStatus in listOf("BUSY", "ASSIGNED", "IN_PROGRESS")) {
             Log.d(TAG, "Нельзя менять статус во время заказа: $driverStatus")
             return
         }
-        val response = apiService.toggleOnlineStatus("Bearer $token", parkId)
-        if (response.isSuccessful) {
-            val newStatus = response.body()?.string()?.trim() ?: driverStatus
-            driverStatus = newStatus
 
-            delay(500)
-            loadDriverProfile()
+        try {
+            val response = apiService.toggleOnlineStatus(
+                token = "Bearer $token",
+                parkingId = parkId
+            )
+
+            if (response.isSuccessful) {
+                val newStatus = response.body()?.string()?.trim()
+                if (newStatus != null) {
+                    driverStatus = newStatus
+                    Log.d(TAG, "Статус изменён на: $newStatus (parkId=${parkId ?: "null"})")
+                }
+                delay(500)
+                loadDriverProfile()
+            } else {
+                val errorMsg = response.errorBody()?.string() ?: "Unknown error"
+                Log.e(TAG, "Неудачный ответ сервера: ${response.code()} - $errorMsg")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Исключение при toggleStatus", e)
         }
     }
 

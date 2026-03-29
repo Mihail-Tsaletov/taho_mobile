@@ -72,7 +72,7 @@ interface ApiService {
     @POST("api/users/getOnLine")
     suspend fun toggleOnlineStatus(
         @Header("Authorization") token: String,
-        @Query("parkId") parkId: Int? = null
+        @Query("parkingId") parkingId: Int? = null
     ): Response<ResponseBody>
 
     @GET("api/orders/getAllOrdersByDriverId")
