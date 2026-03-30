@@ -220,6 +220,12 @@ fun DriverHomeScreen(navController: NavController) {
                         token = token,
                         scope = this,
                         onUpdate = { json ->
+                            val myPos = json.optInt("myPosition", -1)
+                            if (myPos >= 0) {
+                                queuePosition = myPos
+                                Log.d(TAG, "Позиция в очереди: $myPos")
+                                return@subscribe  // ← не парсим как заказ
+                            }
                             Log.d(TAG, "!!! SSE DRIVER RAW !!! → $json") // ← самый важный лог
                             val parsedStatus = try {
                                 json.optString("status", "UNKNOWN")
@@ -542,6 +548,10 @@ fun DriverHomeScreen(navController: NavController) {
                 if (newStatus != null) {
                     driverStatus = newStatus
                     Log.d(TAG, "Статус изменён на: $newStatus (parkId=${parkId ?: "null"})")
+                }
+                if (newStatus == "OFFLINE") {
+                    queuePosition = 0
+                    parkName = null
                 }
                 delay(500)
                 loadDriverProfile()
@@ -1095,7 +1105,7 @@ fun DriverHomeScreen(navController: NavController) {
                     DriverStatusBottomSheet(
                         driverName = driverName,
                         driverStatus = driverStatus,
-                        onToggleStatus = { toggleStatus() },
+                        onToggleStatus = { parkingId -> toggleStatus(parkingId) },
                         onDismiss = { showStatusSheet = false },
                         driverBalance = driverBalance
                     )
