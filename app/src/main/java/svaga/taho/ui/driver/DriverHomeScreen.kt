@@ -3,8 +3,10 @@ package svaga.taho.ui.driver
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.util.Log
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -179,6 +181,7 @@ fun DriverHomeScreen(navController: NavController) {
      * [point] — строка в формате "lat,lon" (как хранится в DriverOrder)
      * [label] — подпись точки назначения в приложении
      */
+    @RequiresApi(Build.VERSION_CODES.DONUT)
     fun openYandexMapsNavigation(context: Context, order: DriverOrder, isPickedUp: Boolean) {
         val (sLat, sLon) = order.startPoint.split(",").map { it.trim() }
         val (eLat, eLon) = order.endPoint.split(",").map { it.trim() }
