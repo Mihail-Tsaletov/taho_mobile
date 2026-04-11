@@ -13,7 +13,7 @@ import java.util.*
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val FREE_WAIT_MS = 2 * 60 * 1000L   // 2 минуты бесплатно
+private const val FREE_WAIT_MS = 1 * 1 * 1000L   // 2 минуты бесплатно
 private const val PAID_WAIT_MS = 15 * 60 * 1000L  // 15 минут платно
 
 sealed class WaitingState {
@@ -77,19 +77,23 @@ class WaitingTimerManager @Inject constructor(
                         val secondsElapsed = (paidElapsed / 1000).toInt()
                         _state.value = WaitingState.PaidWaiting(secondsElapsed)
 
+                        val minutesElapsed = paidElapsed / 1000.0 / 60.0
+                        _paidEndTime.value = String.format("%.1f", minutesElapsed).replace(",", ".")
+
                         // Сохраняем время начала платного ожидания если ещё не сохранено
                         val savedPaidStart = tokenManager.paidWaitStartFlow.value()
                         if (savedPaidStart == 0L) {
                             val paidStartMs = arrivedAt + FREE_WAIT_MS
                             tokenManager.savePaidWaitStart(paidStartMs)
-                            _paidEndTime.value = null // будет обновлено при истечении
                         }
                     }
 
                     else -> {
                         // 15 минут истекли
-                        val paidEndMs = arrivedAt + FREE_WAIT_MS + PAID_WAIT_MS
-                        _paidEndTime.value = dateFormat.format(Date(paidEndMs))
+                        val paidElapsed = elapsed - FREE_WAIT_MS
+                        val minutesElapsed = paidElapsed / 1000.0 / 60.0
+                        // Форматируем как строку с одним знаком после запятой
+                        _paidEndTime.value = String.format("%.1f", minutesElapsed).replace(",", ".")
                         _state.value = WaitingState.Expired
                         timerJob?.cancel()
                         break

@@ -1,16 +1,20 @@
 package svaga.taho.ui.driver
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import svaga.taho.data.remote.DriverOrder
 import javax.inject.Inject
 
 @HiltViewModel
-class DriverViewModel @Inject constructor() : ViewModel() {
+class DriverViewModel @Inject constructor(
+    private val savedStateHandle: SavedStateHandle  // если хочешь пережить пересоздание
+) : ViewModel() {
 
     // Текущий активный заказ (null — заказа нет)
     private val _currentOrder = MutableStateFlow<DriverOrder?>(null)
@@ -31,6 +35,17 @@ class DriverViewModel @Inject constructor() : ViewModel() {
     // Нужно ли вести трек (не в городе)
     private val _shouldTrack = MutableStateFlow(false)
     val shouldTrack = _shouldTrack.asStateFlow()
+
+    private val _savedPaidWaitingMinutes = MutableStateFlow<String?>(null)
+    val savedPaidWaitingMinutes: StateFlow<String?> = _savedPaidWaitingMinutes.asStateFlow()
+
+    fun savePaidWaitingMinutes(minutes: String?) {
+        _savedPaidWaitingMinutes.value = minutes
+    }
+
+    fun clearPaidWaitingMinutes() {
+        _savedPaidWaitingMinutes.value = null
+    }
 
     // Установка текущего заказа
     fun setCurrentOrder(order: DriverOrder?) {

@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import svaga.taho.data.remote.DriverOrder
-import svaga.taho.util.playNotificationSound
 import svaga.taho.util.SseClient
 import javax.inject.Inject
 
@@ -162,7 +161,6 @@ class SseViewModel @Inject constructor(
                 inCity = json.optBoolean("inCity", true)
             )
             _incomingOrder.value = order
-            playNotificationSound(context)
             Log.d(TAG, "Новый заказ получен: ${order.id}")
         } catch (e: Exception) {
             Log.e(TAG, "Ошибка парсинга входящего заказа", e)

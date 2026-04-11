@@ -10,25 +10,27 @@ import com.google.android.gms.location.Priority
 import com.yandex.mapkit.geometry.Point
 import kotlinx.coroutines.*
 import kotlinx.coroutines.tasks.await
+import java.util.concurrent.atomic.AtomicBoolean
 
 object TrackManager {
+
+    private val trackingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var trackingJob: Job? = null
-    private var trackPoints = mutableListOf<Point>()
+    private val trackPoints = mutableListOf<Point>()
 
-    private const val TRACKING_INTERVAL_MS = 7000L // 7 секунд
+    private val isTrackingActive = AtomicBoolean(false)
 
+    private const val TRACKING_INTERVAL_MS = 7000L
+
+    /** Запуск трекинга (можно вызывать多次 — не запустит второй раз) */
     fun startTracking(
         context: Context,
-        scope: CoroutineScope,
         onPointAdded: (Point) -> Unit = {},
         onError: (String) -> Unit = {}
     ) {
-        if (trackingJob?.isActive == true) return // уже запущен
+        if (isTrackingActive.getAndSet(true)) return
 
-
-
-        trackPoints.clear()
-        trackingJob = scope.launch {
+        trackingJob = trackingScope.launch {
             while (isActive) {
                 try {
                     val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
@@ -36,7 +38,7 @@ object TrackManager {
                     if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
                         ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
                     ) {
-                        onError("Нет разрешения на геолокацию")
+                        withContext(Dispatchers.Main) { onError("Нет разрешения на геолокацию") }
                         return@launch
                     }
 
@@ -48,12 +50,16 @@ object TrackManager {
                     if (location != null) {
                         val point = Point(location.latitude, location.longitude)
                         trackPoints.add(point)
-                        onPointAdded(point)
+
+                        // Вызываем колбэк на главном потоке (для UI)
+                        withContext(Dispatchers.Main) {
+                            onPointAdded(point)
+                        }
                     } else {
-                        onError("Локация не получена (null)")
+                        withContext(Dispatchers.Main) { onError("Локация не получена (null)") }
                     }
                 } catch (e: Exception) {
-                    onError("Ошибка получения точки: ${e.message}")
+                    withContext(Dispatchers.Main) { onError("Ошибка получения точки: ${e.message}") }
                 }
 
                 delay(TRACKING_INTERVAL_MS)
@@ -61,9 +67,11 @@ object TrackManager {
         }
     }
 
+    /** Остановить + вернуть JSON (для отправки на сервер) */
     fun stopTrackingAndGetJson(): String {
         trackingJob?.cancel()
         trackingJob = null
+        isTrackingActive.set(false)
 
         if (trackPoints.isEmpty()) return "[]"
 
@@ -76,9 +84,27 @@ object TrackManager {
             append("]")
         }
 
-        trackPoints.clear() // очищаем после получения
+        // trackPoints.clear() ← закомментировано намеренно, чтобы можно было продолжить трек после отправки
         return json
     }
 
+    /** Получить текущий JSON БЕЗ остановки трекинга */
+    fun getCurrentTrackJson(): String {
+        if (trackPoints.isEmpty()) return "[]"
 
+        return buildString {
+            append("[")
+            trackPoints.forEachIndexed { index, point ->
+                append("""{"lat":${point.latitude},"lon":${point.longitude}}""")
+                if (index < trackPoints.size - 1) append(",")
+            }
+            append("]")
+        }
     }
+
+    fun clearTrack() {
+        trackPoints.clear()
+    }
+
+    fun isTracking(): Boolean = isTrackingActive.get()
+}

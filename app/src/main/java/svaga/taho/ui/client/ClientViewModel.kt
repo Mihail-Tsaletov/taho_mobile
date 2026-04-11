@@ -46,7 +46,15 @@ class ClientViewModel @Inject constructor() : ViewModel() {
     private val _showRejected = MutableStateFlow(false)
     val showRejected: StateFlow<Boolean> = _showRejected.asStateFlow()
 
-    // ─────────────────────────────────────────────────────────────
+    // ── Время до прибытия таксы ─────────────────────────────────
+    private val _timeToArrive = MutableStateFlow<String?>(null)
+    val timeToArrive: StateFlow<String?> = _timeToArrive.asStateFlow()
+
+    private val _orderTime = MutableStateFlow("")
+
+    fun setTimeToArrive(time: String?) {
+        _timeToArrive.value = time
+    }
 
 
     fun setStatus(status: String) {
@@ -77,7 +85,7 @@ class ClientViewModel @Inject constructor() : ViewModel() {
 
         val finalPrice = when {
             price?.isNotBlank() == true -> price
-            else -> "Цена не указана"   // или "По тарифу" если хочешь
+            else -> " Цена не указана"   // или "По тарифу" если хочешь
         }
 
         _completionState.value = TripCompletionState(
@@ -93,6 +101,8 @@ class ClientViewModel @Inject constructor() : ViewModel() {
         _driverPhone.value = null
         _showOrderDetails.value = false
         tripStartTimeMs = null
+        _timeToArrive.value = null
+        _orderTime.value = ""
     }
 
     fun dismissCompletion() {

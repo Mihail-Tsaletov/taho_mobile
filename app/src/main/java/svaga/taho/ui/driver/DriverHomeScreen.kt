@@ -42,13 +42,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import svaga.taho.R
 import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.DriverOrder
 import svaga.taho.di.AppModule
 import svaga.taho.ui.auth.AuthViewModel
 import svaga.taho.ui.menu.AppDrawerContentForDriver
-import svaga.taho.util.playNotificationSound
 import androidx.core.net.toUri
 import com.yandex.mapkit.geometry.BoundingBox
 import com.yandex.mapkit.search.SearchFactory
@@ -61,13 +59,12 @@ import svaga.taho.util.WaitingState
 import svaga.taho.util.location.TrackManager
 import java.math.BigDecimal
 import java.math.RoundingMode
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.ui.focus.onFocusChanged
 import svaga.taho.data.remote.CreateOrderRequest
+import svaga.taho.util.playRepeatingNotificationSound
+import svaga.taho.util.stopNotificationSound
 
 private const val TAG = "DriverHomeScreen"
 var sseJob by mutableStateOf<Job?>(null)
@@ -92,7 +89,7 @@ fun DriverHomeScreen(navController: NavController) {
     val isTracking by driverViewModel.isTracking.collectAsState()
     val shouldTrack by driverViewModel.shouldTrack.collectAsState()
     val waitingState by waitingTimerManager.state.collectAsState()
-    val paidEndTime by waitingTimerManager.paidEndTime.collectAsState()
+    val savedPaidWaitingMinutes by driverViewModel.savedPaidWaitingMinutes.collectAsState()
 
     // СОСТОЯНИЯ
     var routePolyline by remember { mutableStateOf<PolylineMapObject?>(null) }
@@ -117,6 +114,8 @@ fun DriverHomeScreen(navController: NavController) {
     var queuePosition by remember { mutableStateOf(0) }
     var parkName by remember { mutableStateOf<String?>(null) }
 
+    var showTimeToArriveDialog by remember { mutableStateOf(false) }
+    var pendingOrder by remember { mutableStateOf<DriverOrder?>(null) }
 
 
     val createSuggestSession = remember {
@@ -268,7 +267,7 @@ fun DriverHomeScreen(navController: NavController) {
                             )
                             driverViewModel.setCurrentOrder(order)
                             driverViewModel.setShouldTrack(!order.inCity)
-                            playNotificationSound(context)
+                            playRepeatingNotificationSound(context)
                         }
                     )
                     Log.d(TAG, "Подписка на driver запущена успешно")
@@ -300,7 +299,12 @@ fun DriverHomeScreen(navController: NavController) {
     }
 
     LaunchedEffect(isPickedUp) {
-        if (isPickedUp) waitingTimerManager.reset()
+        if (isPickedUp) {
+            val minutes = waitingTimerManager.paidEndTime.value
+            Log.d(TAG, "Сохраняем платное ожидание перед сбросом: $minutes")
+            driverViewModel.savePaidWaitingMinutes(minutes)
+            waitingTimerManager.reset()
+        }
     }
 
     LaunchedEffect(true) {  // true — константа, срабатывает только один раз
@@ -328,6 +332,7 @@ fun DriverHomeScreen(navController: NavController) {
 
             // Обновляем заказ и состояния
             driverViewModel.setCurrentOrder(order)
+            driverViewModel.setShouldTrack(!order.inCity)
                 //setupOrder(order)
 
             when (order.status) {
@@ -357,6 +362,7 @@ fun DriverHomeScreen(navController: NavController) {
                     driverViewModel.setPickedUp(false)
                     driverViewModel.setTracking(false)
                     Log.d(TAG, "ASSIGNED/ACCEPTED → сброс состояний")
+                    stopNotificationSound()
                 }
 
                 else -> {
@@ -393,6 +399,27 @@ fun DriverHomeScreen(navController: NavController) {
             })
         } else createToSuggestions = emptyList()
     }
+
+    LaunchedEffect(currentOrder?.id, isPickedUp, shouldTrack) {
+        if (currentOrder == null || !isPickedUp || !shouldTrack || !TrackManager.isTracking().not()) {
+            return@LaunchedEffect
+        }
+        if (isPickedUp && shouldTrack && !TrackManager.isTracking()) {
+
+            Log.d(TAG, "Экран вернулся — возобновляем трекинг")
+            TrackManager.startTracking(
+                context = context,
+                onPointAdded = { point ->
+                    Log.d(TAG, "Точка (возобновление): ${point.latitude}, ${point.longitude}")
+                },
+                onError = { error ->
+                    Log.e(TAG, error)
+                }
+            )
+            driverViewModel.setTracking(true)
+        }
+    }
+
     // Функция загрузки профиля
     suspend fun loadDriverProfile() {
         try {
@@ -417,14 +444,14 @@ fun DriverHomeScreen(navController: NavController) {
         }
     }
     // ФУНКЦИЯ ДЛЯ ПРИНЯТИЯ ЗАКАЗА
-    val acceptOrder: () -> Unit = {
+    val acceptOrder: (String) -> Unit = { timeToArrive ->
         currentOrder?.let { order ->
             scope.launch {
                 try {
                     loadDriverProfile()
-                    apiService.acceptOrder("Bearer $token", order.id)
+                    stopNotificationSound()
+                    apiService.acceptOrder("Bearer $token", order.id, timeToArrive)
                     driverViewModel.setCurrentOrder(order.copy(status = "ACCEPTED"))
-                    // Запускаем SSE для конкретного заказа
                     orderUpdatesSseJob?.cancel()
                     orderUpdatesSseJob = scope.launch {
                         sseClient.subscribe(
@@ -437,90 +464,70 @@ fun DriverHomeScreen(navController: NavController) {
                                     "CANCELLED", "COMPLETED" -> {
                                         driverViewModel.resetOrderStates()
                                         scope.launch {
-                                            delay(500) // небольшая задержка, чтобы избежать гонки
+                                            delay(500)
                                             loadDriverProfile()
                                         }
                                         orderUpdatesSseJob?.cancel()
-                                        Log.d(TAG, "Заказ $status → вернулся в режим ожидания новых заказов")
-                                        // Принудительный перезапуск подписки на новые заказы
                                         scope.launch {
                                             delay(500)
-                                            Log.d(TAG, "ПРИНУДИТЕЛЬНЫЙ ПЕРЕЗАПУСК ПОДПИСКИ DRIVER ПОСЛЕ ЗАВЕРШЕНИЯ")
                                             newOrdersSseJob?.cancel()
                                             newOrdersSseJob = scope.launch {
-                                                Log.d(TAG, "Перезапуск: job на driver создана заново")
                                                 sseClient.subscribe(
                                                     orderId = "driver",
                                                     token = token,
                                                     scope = this,
                                                     onUpdate = { json ->
-                                                        Log.d(TAG, "!!! SSE DRIVER RAW (restart) !!! → $json")
-                                                        val parsedStatus = try {
-                                                            json.optString("status", "UNKNOWN")
-                                                        } catch (e: Exception) {
-                                                            Log.e(TAG, "Ошибка парсинга json в driver SSE (restart)", e)
+                                                        val myPos = json.optInt("myPosition", -1)
+                                                        if (myPos >= 0) {
+                                                            queuePosition = myPos
                                                             return@subscribe
                                                         }
-                                                        Log.d(TAG, "Получен статус в driver (restart): $parsedStatus | currentOrder = ${currentOrder?.id} (${currentOrder?.status})")
-                                                        if (currentOrder?.status in listOf("ACCEPTED", "PICKED_UP", "ARRIVED", "IN_PROGRESS")) {
-                                                            Log.d(TAG, "Игнорируем новый заказ — активный уже есть (restart)")
-                                                            return@subscribe
-                                                        }
-                                                        Log.d(TAG, "Обрабатываем новый заказ как свободный! (restart)")
-                                                        val order = DriverOrder(
-                                                            id = json.getString("id"),
-                                                            startPoint = json.getString("startPoint"),
-                                                            endPoint = json.getString("endPoint"),
-                                                            startAddress = json.getString("startAddress"),
-                                                            endAddress = json.getString("endAddress"),
-                                                            passengerName = json.getString("passengerName"),
-                                                            passengerPhone = json.getString("passengerPhone"),
-                                                            price = json.getString("price"),
-                                                            distance = json.getString("distance"),
-                                                            status = "ASSIGNED",
-                                                            inCity = json.optBoolean("inCity", true)
-                                                        )
-                                                        driverViewModel.setCurrentOrder(order)
-                                                        driverViewModel.setShouldTrack(!order.inCity)
-                                                        playNotificationSound(context)
+                                                        if (currentOrder?.status in listOf("ACCEPTED", "PICKED_UP", "ARRIVED", "IN_PROGRESS")) return@subscribe
+                                                        val newOrder = runCatching {
+                                                            DriverOrder(
+                                                                id = json.getString("id"),
+                                                                startPoint = json.getString("startPoint"),
+                                                                endPoint = json.getString("endPoint"),
+                                                                startAddress = json.getString("startAddress"),
+                                                                endAddress = json.getString("endAddress"),
+                                                                passengerName = json.getString("passengerName"),
+                                                                passengerPhone = json.getString("passengerPhone"),
+                                                                price = json.getString("price"),
+                                                                distance = json.getString("distance"),
+                                                                status = "ASSIGNED",
+                                                                inCity = json.optBoolean("inCity", true)
+                                                            )
+                                                        }.getOrNull() ?: return@subscribe
+                                                        driverViewModel.setCurrentOrder(newOrder)
+                                                        driverViewModel.setShouldTrack(!newOrder.inCity)
+                                                        playRepeatingNotificationSound(context)
                                                     }
                                                 )
                                             }
                                         }
                                     }
-                                    "ARRIVED" -> {
-                                        driverViewModel.setArrived(true)
-                                        Log.d(TAG, "Водитель на месте (ARRIVED)")
-                                    }
+                                    "ARRIVED" -> driverViewModel.setArrived(true)
                                     "PICKED_UP" -> {
                                         driverViewModel.setPickedUp(true)
                                         if (shouldTrack && !isTracking) {
                                             driverViewModel.setTracking(true)
-                                            TrackManager.startTracking(
+                                            TrackManager.startTracking(          // ← новый вызов БЕЗ scope
                                                 context = context,
-                                                scope = scope,
                                                 onPointAdded = { point ->
-                                                    Log.d(TAG, "Точка трека добавлена: ${point.latitude}, ${point.longitude}")
+                                                    Log.d(TAG, "Точка добавлена: ${point.latitude}, ${point.longitude}")
                                                 },
                                                 onError = { error ->
-                                                    Toast.makeText(context, "Ошибка трекинга: $error", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(context, "Ошибка трека: $error", Toast.LENGTH_SHORT).show()
                                                 }
                                             )
                                         }
-                                        Log.d(TAG, "Пассажир забран (PICKED_UP)")
                                     }
-                                    "IN_PROGRESS" -> {
-                                        // можно что-то дополнительно, если нужно
-                                        Log.d(TAG, "Поездка в процессе")
-                                    }
-                                    else -> {
-                                        Log.d(TAG, "Необработанный статус заказа: $status")
-                                    }
+                                    "IN_PROGRESS" -> Log.d(TAG, "В процессе")
+                                    else -> Log.d(TAG, "Статус: $status")
                                 }
                             }
                         )
                     }
-                   // setupOrder(order)
                 } catch (e: Exception) {
                     Log.e(TAG, "Ошибка принятия заказа", e)
                     Toast.makeText(context, "Не удалось принять заказ", Toast.LENGTH_SHORT).show()
@@ -707,7 +714,11 @@ fun DriverHomeScreen(navController: NavController) {
                                 Spacer(Modifier.height(20.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                     Button(
-                                        onClick = acceptOrder,
+                                        onClick = {
+                                            stopNotificationSound()
+                                            pendingOrder = order
+                                            showTimeToArriveDialog = true
+                                        },
                                         colors = ButtonDefaults.buttonColors(containerColor = Color.White),
                                         modifier = Modifier.weight(1f)
                                     ) {
@@ -717,8 +728,11 @@ fun DriverHomeScreen(navController: NavController) {
                                         onClick = {
                                             scope.launch {
                                                 try {
+                                                    stopNotificationSound()
                                                     apiService.cancelOrder("Bearer $token", order.id)
                                                 } catch (e: Exception) {
+
+                                                    stopNotificationSound()
                                                     Log.e(TAG, "Ошибка отклонения заказа", e)
                                                 }
                                                 driverViewModel.setCurrentOrder(null)
@@ -788,53 +802,56 @@ fun DriverHomeScreen(navController: NavController) {
                                         Button(
                                             onClick = {
                                                 scope.launch {
+                                                    val waitingMinutes = savedPaidWaitingMinutes
+                                                    Log.d(TAG, "=== ЗАВЕРШЕНИЕ ЗАКАЗА ===")
+                                                    Log.d(TAG, "shouldTrack = $shouldTrack | isTracking = $isTracking | savedPaidWaitingMinutes = $waitingMinutes")
+
                                                     try {
                                                         val trackJson = if (shouldTrack) {
-                                                            TrackManager.stopTrackingAndGetJson()
+                                                            // ← Сюда должны попадать, если трек нужен
+                                                            val currentJson = TrackManager.getCurrentTrackJson()
+                                                            val pointCount = TrackManager.getCurrentTrackJson().count { it == '{' } // грубо считаем точки
+                                                            Log.d(TAG, "Перед остановкой — точек: $pointCount | JSON: $currentJson")
+
+                                                            val finalJson = TrackManager.stopTrackingAndGetJson()
+                                                            Log.d(TAG, "TrackManager.stopTrackingAndGetJson() вернул: $finalJson")
+                                                            finalJson
                                                         } else {
-                                                            "[]" // null, если бэк разрешает
+                                                            Log.d(TAG, "shouldTrack = false → отправляем пустой трек []")
+                                                            TrackManager.stopTrackingAndGetJson() // всё равно останавливаем на всякий случай
+                                                            "[]"
                                                         }
+
                                                         val response = apiService.driverComplete(
                                                             "Bearer $token",
                                                             order.id,
-                                                            trackJson // ← отправляем собранный трек
+                                                            trackJson,
+                                                            downtime = waitingMinutes
                                                         )
+
                                                         if (response.isSuccessful) {
-                                                            Toast.makeText(
-                                                                context,
-                                                                "Поездка завершена, трек отправлен",
-                                                                Toast.LENGTH_SHORT
-                                                            ).show()
-                                                            Log.d(TAG, "Поездка завершена, трек отправлен $trackJson")
+                                                            Toast.makeText(context, "Поездка завершена, трек отправлен", Toast.LENGTH_SHORT).show()
+                                                            Log.d(TAG, "Поездка завершена → отправлен трек длиной ${trackJson.length} символов")
+                                                            Log.d(TAG, "Платное ожидание отправлено: $waitingMinutes")
+
+                                                            // Финальная очистка
+                                                            TrackManager.clearTrack()
+                                                            driverViewModel.setTracking(false)
+                                                            driverViewModel.resetOrderStates()
                                                             loadDriverProfile()
-
                                                         } else {
-                                                            Toast.makeText(
-                                                                context,
-                                                                "Ошибка отправки трека",
-                                                                Toast.LENGTH_LONG
-                                                            ).show()
-                                                            Log.e(TAG, "оШИБКА ОТПРАВКИ ТРЕК")
+                                                            Log.e(TAG, "Ошибка driverComplete: код ${response.code()}")
                                                         }
-
-                                                        driverViewModel.resetOrderStates()
-
-                                                        // Можно сбросить состояние или ждать COMPLETED от SSE
                                                     } catch (e: Exception) {
-                                                        Log.e(TAG, "Ошибка завершения заказа", e)
+                                                        Log.e(TAG, "Критическая ошибка при завершении заказа", e)
+                                                        Toast.makeText(context, "Ошибка завершения: ${e.message}", Toast.LENGTH_LONG).show()
                                                     }
                                                 }
                                             },
                                             modifier = Modifier.fillMaxWidth(),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = Color(0xFFE91E63)
-                                            )
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE91E63))
                                         ) {
-                                            Text(
-                                                "Завершить заказ",
-                                                color = Color.White,
-                                                fontSize = 18.sp
-                                            )
+                                            Text("Завершить заказ", color = Color.White, fontSize = 18.sp)
                                         }
                                     }
                                     isArrived -> {
@@ -869,7 +886,7 @@ fun DriverHomeScreen(navController: NavController) {
                                             is WaitingState.Expired -> {
                                                 LaunchedEffect(Unit) {
                                                     try {
-                                                        // TODO: передать paidEndTime на сервер при завершении
+                                                        val endTime = waitingTimerManager.paidEndTime.value
                                                         // apiService.driverComplete("Bearer $token", order.id, trackJson, paidEndTime)
                                                         driverViewModel.resetOrderStates()
                                                         waitingTimerManager.reset()
@@ -897,14 +914,17 @@ fun DriverHomeScreen(navController: NavController) {
                                                             order.id
                                                         )
                                                         driverViewModel.setPickedUp(true)
+
                                                         if (shouldTrack && !isTracking) {
                                                             driverViewModel.setTracking(true)
-                                                            Log.d(TAG, "Трекинг нужен (inCity = false)")
+                                                            Log.d(TAG, "Трекинг запущен вручную (кнопка «Забрал пассажира»)")
+
+                                                            // ← НОВЫЙ ВЫЗОВ (без scope!)
                                                             TrackManager.startTracking(
                                                                 context = context,
-                                                                scope = scope,
                                                                 onPointAdded = { point ->
                                                                     Log.d(TAG, "Точка добавлена: ${point.latitude}, ${point.longitude}")
+                                                                    // Здесь можно добавить обновление polyline на карте, если нужно
                                                                 },
                                                                 onError = { error ->
                                                                     Toast.makeText(context, "Ошибка трека: $error", Toast.LENGTH_SHORT).show()
@@ -919,9 +939,7 @@ fun DriverHomeScreen(navController: NavController) {
                                                 }
                                             },
                                             modifier = Modifier.fillMaxWidth(),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = Color(0xFFFF9800)
-                                            )
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
                                         ) {
                                             Text("Забрал пассажира")
                                         }
@@ -1103,7 +1121,36 @@ fun DriverHomeScreen(navController: NavController) {
                         }
                     }
                 }
-
+                if (showTimeToArriveDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showTimeToArriveDialog = false },
+                        title = { Text("Время до прибытия", fontWeight = FontWeight.Bold) },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf("5 минут", "10 минут", "15+ минут").forEach { time ->
+                                    Button(
+                                        onClick = {
+                                            stopNotificationSound()
+                                            showTimeToArriveDialog = false
+                                            acceptOrder(time)
+                                            stopNotificationSound()
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
+                                    ) {
+                                        Text(time, color = Color.White)
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {},
+                        dismissButton = {
+                            TextButton(onClick = { showTimeToArriveDialog = false }) {
+                                Text("Отмена")
+                            }
+                        }
+                    )
+                }
                 if (showStatusSheet) {
                     DriverStatusBottomSheet(
                         driverName = driverName,

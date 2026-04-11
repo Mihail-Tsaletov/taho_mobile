@@ -45,7 +45,11 @@ interface ApiService {
     ): Response<List<DriverOrder>>
 
     @POST("api/orders/{id}/accept")
-    suspend fun acceptOrder(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
+    suspend fun acceptOrder(
+        @Header("Authorization") token: String,
+        @Path("id") orderId: String,
+        @Query("timeToArrive") timeToArrive: String? = null
+    ): Response<ResponseBody>
 
     @POST("api/orders/{id}/cancel")
     suspend fun cancelOrder(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
@@ -55,7 +59,8 @@ interface ApiService {
     @POST("api/orders/{id}/complete")
     suspend fun driverComplete(@Header("Authorization") token: String,
                                @Path("id") orderId: String,
-                               @Body trackJson: String): Response<ResponseBody>
+                               @Body trackJson: String,
+                               @Query("downtime") downtime: String? = null): Response<ResponseBody>
 
     @POST("api/orders/{id}/pickedUp")
     suspend fun driverPickedUp(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>

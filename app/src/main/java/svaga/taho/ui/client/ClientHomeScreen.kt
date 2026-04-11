@@ -74,6 +74,7 @@ fun ClientHomeScreen(navController: NavController) {
     val completionState by clientViewModel.completionState.collectAsState()
     val showCancelled by clientViewModel.showCancelled.collectAsState()
     val showRejected by clientViewModel.showRejected.collectAsState()
+    val timeToArrive by clientViewModel.timeToArrive.collectAsState()
 
 
 
@@ -83,7 +84,7 @@ fun ClientHomeScreen(navController: NavController) {
     var fromPoint   by remember { mutableStateOf<Point?>(null) }
     var toPoint     by remember { mutableStateOf<Point?>(null) }
     var isOrderPlaced by remember { mutableStateOf(false) }
-    var orderTime    by remember { mutableStateOf("") }
+
 
 
     // Поиск по тексту (подсказки)
@@ -143,59 +144,121 @@ fun ClientHomeScreen(navController: NavController) {
     }
     LaunchedEffect(activeOrder?.id) {
         // Крутим пока есть активный заказ
-        while (activeOrder != null) {
-            delay(5_000)
-            activeOrderManager.loadActiveOrderForClient()
-        }
     }
 
-    LaunchedEffect(activeOrder) {
-        activeOrder?.let { order ->
-            Log.d(TAG, "Активный заказ загружен: ${order.id}")
-            // УБЕРИ эту строку:
-            // showOrderDetails = false  ← удали
-            fromAddress = order.startAddress
-            toAddress = order.endAddress
-            isOrderPlaced = false
+    // Запуск SSE только когда есть активный заказ И он ещё не завершён
+    // ← ЗАПУСК SSE + УСТАНОВКА НАЧАЛЬНОГО СОСТОЯНИЯ
+    LaunchedEffect(activeOrder?.id, token) {
+        val order = activeOrder ?: return@LaunchedEffect
 
-            when (order.status) {
-                "ACCEPTED", "PICKED_UP" -> clientViewModel.setStatus("Заказ принят")
-                "ARRIVED"               -> clientViewModel.setStatus("Водитель на месте")
-                "IN_PROGRESS"           -> {
-                    clientViewModel.setStatus("В пути")
-                    clientViewModel.onTripStarted()
-                }
-                "COMPLETED", "CANCELLED" -> {
-                    // ← Сначала перезагружаем заказ, чтобы получить свежие данные (включая цену)
-                    coroutineScope.launch {
-                        activeOrderManager.loadActiveOrderForClient()
-                        // Даём небольшое время на обновление StateFlow
-                        delay(300)
+        Log.d(TAG, "LaunchedEffect: активный заказ загружен → ID=${order.id}, status=${order.status}")
 
-                        val finalPrice = activeOrder?.price?.takeIf { it.isNotBlank() }
-                            ?: "По тарифу"
+        // === ВАЖНО: Устанавливаем все данные сразу ===
+        fromAddress = order.startAddress
+        toAddress = order.endAddress
+        clientViewModel.setShowOrderDetails(true)
+        clientViewModel.setDriverInfo(order.driverName, order.driverPhone)
 
-                        Log.d(
-                            TAG,
-                            "LaunchedEffect COMPLETED → price после reload: $finalPrice | activeOrder: $activeOrder"
-                        )
-
-                        clientViewModel.onTripCompleted(finalPrice)
-                        activeOrderManager.clear()
-                    }
-                }
-                "REJECTED" -> {
-                    clientViewModel.onOrderRejected()
-                    activeOrderManager.clear()
-                }
-                else -> {} // не трогаем статус
+        // Устанавливаем корректный начальный статус из базы
+        when (order.status) {
+            "ACCEPTED", "PICKED_UP" -> clientViewModel.setStatus("Заказ принят")
+            "ARRIVED"               -> clientViewModel.setStatus("Водитель на месте")
+            "IN_PROGRESS"           -> {
+                clientViewModel.setStatus("В пути")
+                clientViewModel.onTripStarted()
             }
-            clientViewModel.setDriverInfo(order.driverName, order.driverPhone)
+            "ASSIGNED"              -> clientViewModel.setStatus("Водитель назначен")
+            "COMPLETED"             -> {
+                clientViewModel.onTripCompleted(order.price ?: "По тарифу")
+                activeOrderManager.clear()
+                return@LaunchedEffect
+            }
+            "CANCELLED"             -> {
+                clientViewModel.onOrderCancelled()
+                activeOrderManager.clear()
+                return@LaunchedEffect
+            }
+            "REJECTED"              -> {
+                clientViewModel.onOrderRejected()
+                activeOrderManager.clear()
+                return@LaunchedEffect
+            }
+            else                    -> clientViewModel.setStatus("В обработке") // fallback
+        }
 
-        } ?: run {
-            clientViewModel.resetOrderState()
-            isOrderPlaced = false
-            sseJob?.cancel()
+        // Если заказ уже завершён — SSE не запускаем
+        if (order.status in listOf("COMPLETED", "CANCELLED", "REJECTED")) {
+            return@LaunchedEffect
+        }
+
+        // === Запускаем SSE ===
+        Log.d(TAG, "Запускаем SSE для заказа ${order.id} (status: ${order.status})")
+
+        sseJob?.cancel()
+
+        sseJob = coroutineScope.launch {
+            sseClient.subscribe(
+                orderId = order.id,
+                token = token,
+                scope = this,
+                onUpdate = { json ->
+                    val status = json.optString("status", "")
+                    Log.d(TAG, "SSE → status: $status | json: $json")
+
+                    json.optString("timeToArrive").takeIf { it.isNotBlank() }?.let {
+                        clientViewModel.setTimeToArrive(it)
+                    }
+
+                    if (status.isNotEmpty()) {
+                        when (status) {
+                            "COMPLETED" -> {
+                                coroutineScope.launch {
+                                    delay(300)
+                                    activeOrderManager.loadActiveOrderForClient()
+                                    val finalPrice = json.optString("price").takeIf { it.isNotBlank() }
+                                        ?: order.price?.takeIf { it.isNotBlank() }
+                                        ?: "По тарифу"
+
+                                    clientViewModel.onTripCompleted(finalPrice)
+                                    activeOrderManager.clear()
+                                    sseClient.disconnect()
+                                }
+                            }
+                            "CANCELLED" -> {
+                                clientViewModel.onOrderCancelled()
+                                activeOrderManager.clear()
+                            }
+                            "REJECTED" -> {
+                                clientViewModel.onOrderRejected()
+                                activeOrderManager.clear()
+                            }
+                            else -> {
+                                when (status) {
+                                    "ACCEPTED", "PICKED_UP" -> clientViewModel.setStatus("Заказ принят")
+                                    "ARRIVED"               -> clientViewModel.setStatus("Водитель на месте")
+                                    "IN_PROGRESS"           -> {
+                                        clientViewModel.setStatus("В пути")
+                                        clientViewModel.onTripStarted()
+                                    }
+                                    "ASSIGNED" -> clientViewModel.setStatus("Водитель назначен")
+                                    else -> clientViewModel.setStatus("Статус: $status")
+                                }
+                            }
+                        }
+                    }
+
+                    // Обновление информации о водителе
+                    val newDriverName = json.optString("driverName").takeIf { it.isNotBlank() }
+                    val newDriverPhone = json.optString("driverPhone").takeIf { it.isNotBlank() }
+                    if (newDriverName != null || newDriverPhone != null) {
+                        clientViewModel.setDriverInfo(
+                            newDriverName ?: driverName,
+                            newDriverPhone ?: driverPhone
+                        )
+                    }
+                },
+                onError = { e -> Log.e(TAG, "SSE ошибка", e) }
+            )
         }
     }
 
@@ -356,28 +419,6 @@ fun ClientHomeScreen(navController: NavController) {
                 )
 
 
-                // Карточка активного заказа сверху
-                if (activeOrder != null && !showOrderDetails) {
-                    Card(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .fillMaxWidth()
-                            .padding(16.adaptiveDp())
-                            .clickable { clientViewModel.setShowOrderDetails(true) },
-                        colors = CardDefaults.cardColors(Color(0xFF1E88E5)),
-                        elevation = CardDefaults.cardElevation(8.adaptiveDp())
-                    ) {
-                        Column(Modifier.padding(16.adaptiveDp())) {
-                            Text("Активный заказ", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.adaptiveSp())
-                            Spacer(Modifier.height(8.adaptiveDp()))
-                            Text("От: $fromAddress", color = Color.White.copy(alpha = 0.9f))
-                            Text("До: $toAddress", color = Color.White.copy(alpha = 0.9f))
-                            Text("Статус: $currentStatus", color = Color.White)
-                            driverName?.let { Text("Водитель: $it", color = Color.White) }
-                        }
-                    }
-                }
-
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -422,7 +463,6 @@ fun ClientHomeScreen(navController: NavController) {
                                         clientViewModel.dismissCompletion()
                                         fromAddress = "Откуда"
                                         toAddress = "Куда едем?"
-                                        orderTime = ""
                                         isOrderPlaced = false
                                     },
                                     modifier = Modifier.fillMaxWidth(),
@@ -474,7 +514,6 @@ fun ClientHomeScreen(navController: NavController) {
                                         clientViewModel.dismissCancelled()
                                         fromAddress = "Откуда"
                                         toAddress = "Куда едем?"
-                                        orderTime = ""
                                         isOrderPlaced = false
                                     },
 
@@ -527,7 +566,6 @@ fun ClientHomeScreen(navController: NavController) {
                                         clientViewModel.dismissRejected()
                                         fromAddress = "Откуда"
                                         toAddress = "Куда едем?"
-                                        orderTime = ""
                                         isOrderPlaced = false
                                     },
                                     modifier = Modifier.fillMaxWidth(),
@@ -605,7 +643,15 @@ fun ClientHomeScreen(navController: NavController) {
 
                                 Text("Откуда: $fromAddress")
                                 Text("Куда: $toAddress")
-                                Text("Время: $orderTime")
+                                timeToArrive?.let {
+                                    Spacer(Modifier.height(4.adaptiveDp()))
+                                    Text(
+                                        text = "Водитель будет через: $it",
+                                        color = Color(0xFF1E88E5),
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 14.adaptiveSp()
+                                    )
+                                }
 
                                 // Можно добавить кнопку "Отменить заказ", если нужно
                             }
@@ -655,7 +701,7 @@ fun ClientHomeScreen(navController: NavController) {
                             )
 
                             if (focusedField == "from" && fromSuggestions.isNotEmpty()) {
-                                LazyColumn(modifier = Modifier.heightIn(max = 240.adaptiveDp())) {
+                                LazyColumn(modifier = Modifier.heightIn(max = 230.adaptiveDp())) {
                                     items(fromSuggestions) { item ->
                                         val text = item.displayText ?: item.title.text
                                         Text(
@@ -726,7 +772,6 @@ fun ClientHomeScreen(navController: NavController) {
                         Button(
                             onClick = {
                                 coroutineScope.launch {
-                                    orderTime = SimpleDateFormat("HH:mm, dd MMM", Locale("ru")).format(Date())
                                     isOrderPlaced = true
 
                                     val startStr = fromPoint?.let { "${it.latitude}, ${it.longitude}" } ?: ""
@@ -764,6 +809,9 @@ fun ClientHomeScreen(navController: NavController) {
                                                 scope = coroutineScope,
                                                 onUpdate = { json ->
                                                     val status = json.optString("status", "")
+                                                    json.optString("timeToArrive").takeIf { it.isNotBlank() }?.let {
+                                                        clientViewModel.setTimeToArrive(it)
+                                                    }
                                                     Log.d(TAG, "SSE onUpdate: $status")
                                                     if (status.isNotEmpty()) {
                                                         when (status) {
@@ -771,6 +819,7 @@ fun ClientHomeScreen(navController: NavController) {
                                                                 coroutineScope.launch {
                                                                     // Перезагружаем заказ перед очисткой
                                                                     activeOrderManager.loadActiveOrderForClient()
+                                                                    clientViewModel.setTimeToArrive(null)
                                                                     delay(300)
 
                                                                     val finalPrice = json.optString("price").takeIf { it.isNotBlank() }
@@ -787,6 +836,7 @@ fun ClientHomeScreen(navController: NavController) {
                                                             "CANCELLED" -> {
                                                                 clientViewModel.onOrderCancelled()
                                                                 activeOrderManager.clear()
+                                                                clientViewModel.setTimeToArrive(null)
                                                             }
                                                             else -> {
                                                                 when (status) {
