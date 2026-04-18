@@ -110,6 +110,9 @@ fun ClientHomeScreen(navController: NavController) {
         SearchFactory.getInstance().createSearchManager(SearchManagerType.COMBINED)
     }
 
+    //Цена заказа предварительно
+    var calculatedPrice by remember { mutableStateOf<Double?>(null) }
+
     // SSE и API
     val sseClient = remember {
         EntryPointAccessors.fromApplication(
@@ -145,6 +148,43 @@ fun ClientHomeScreen(navController: NavController) {
     LaunchedEffect(activeOrder?.id) {
         // Крутим пока есть активный заказ
     }
+
+// ← Автоматический расчёт цены при изменении точек
+    LaunchedEffect(fromPoint, toPoint) {
+        if (fromPoint != null && toPoint != null && token.isNotBlank()) {
+
+            val startStr = "${fromPoint!!.latitude}, ${fromPoint!!.longitude}"
+            val endStr   = "${toPoint!!.latitude}, ${toPoint!!.longitude}"
+
+            try {
+                val api = EntryPointAccessors.fromApplication(
+                    context.applicationContext,
+                    AppModule.ApiProvider::class.java
+                ).apiService()
+
+                val response = api.calculatePrice(
+                    token = "Bearer $token",
+                    request = mapOf(
+                        "startPoint" to startStr,
+                        "endPoint"   to endStr
+                    )
+                )
+
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    calculatedPrice = (body?.get("price") as? Number)?.toDouble()
+                } else {
+                    calculatedPrice = null
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Ошибка расчёта предварительной цены", e)
+                calculatedPrice = null
+            }
+        } else {
+            calculatedPrice = null
+        }
+    }
+
 
     // Запуск SSE только когда есть активный заказ И он ещё не завершён
     // ← ЗАПУСК SSE + УСТАНОВКА НАЧАЛЬНОГО СОСТОЯНИЯ
@@ -767,6 +807,41 @@ fun ClientHomeScreen(navController: NavController) {
                         }
 
                         Spacer(Modifier.height(20.adaptiveDp()))
+
+                        // ← Блок с предварительной ценой
+                        if (calculatedPrice != null) {
+                            val isOutside = calculatedPrice == 404.0   // именно то значение, которое возвращает бэкенд при Outside
+
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isOutside) Color(0xFFFFF3E0) else Color(0xFFE8F5E9)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(16.adaptiveDp()),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        if (isOutside) "Цена по таксометру" else "Предварительная цена:",
+                                        fontSize = 16.adaptiveSp(),
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (isOutside) Color(0xFFEF6C00) else Color.Unspecified
+                                    )
+                                    Spacer(Modifier.weight(1f))
+
+                                    if (!isOutside) {
+                                        Text(
+                                            "${calculatedPrice!!.toInt()} ₽",
+                                            fontSize = 22.adaptiveSp(),
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF2E7D32)
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(12.adaptiveDp()))
+                        }
 
                         // Кнопка Заказать
                         Button(

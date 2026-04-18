@@ -94,6 +94,12 @@ interface ApiService {
         @Body request: CreateOrderRequest
     ): Response<ResponseBody>
 
+    @POST("api/orders/calculate-price")
+    suspend fun calculatePrice(
+        @Header("Authorization") token: String,
+        @Body request: Map<String, String>
+    ): Response<Map<String, Any>>
+
 
 }
 
