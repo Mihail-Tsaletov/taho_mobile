@@ -63,6 +63,9 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.foundation.lazy.items
 import svaga.taho.data.remote.CreateOrderRequest
+import svaga.taho.ui.components.CallOperatorButton
+import svaga.taho.util.adaptiveDp
+import svaga.taho.util.adaptiveSp
 import svaga.taho.util.playRepeatingNotificationSound
 import svaga.taho.util.stopNotificationSound
 
@@ -627,11 +630,11 @@ fun DriverHomeScreen(navController: NavController) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(16.dp)
+                        .padding(16.adaptiveDp())
                         .clip(CircleShape)
                         .background(statusColor)
                         .clickable(enabled = statusClickable) { showStatusSheet = true }
-                        .padding(horizontal = 35.dp, vertical = 8.dp)
+                        .padding(horizontal = 35.adaptiveDp(), vertical = 8.adaptiveDp())
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -640,32 +643,32 @@ fun DriverHomeScreen(navController: NavController) {
                             text = statusText,
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
+                            fontSize = 16.adaptiveSp()
                         )
                         if (driverBalance >= BigDecimal.ZERO) {
                             Text(
                                 text = "${driverBalance.setScale(0, RoundingMode.HALF_UP)} ₽",
                                 color = Color.White.copy(alpha = 0.8f),
-                                fontSize = 14.sp,
+                                fontSize = 14.adaptiveSp(),
                                 fontWeight = FontWeight.Medium
                             )
 
                             when {
                                 currentOrder != null -> {
-                                    Text(text = "🚗 В заказе", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+                                    Text(text = "🚗 В заказе", color = Color.White.copy(alpha = 0.8f), fontSize = 12.adaptiveSp())
                                 }
                                 queuePosition > 0 -> {
                                     Text(
                                         text = "Очередь: $queuePosition",
                                         color = Color.White.copy(alpha = 0.9f),
-                                        fontSize = 13.sp,
+                                        fontSize = 13.adaptiveSp(),
                                         fontWeight = FontWeight.Medium
                                     )
                                     parkName?.let {
                                         Text(
                                             text = it,
                                             color = Color.White.copy(alpha = 0.7f),
-                                            fontSize = 12.sp
+                                            fontSize = 12.adaptiveSp()
                                         )
                                     }
                                 }
@@ -683,21 +686,21 @@ fun DriverHomeScreen(navController: NavController) {
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .padding(16.dp),
+                            .padding(16.adaptiveDp()),
                         colors = CardDefaults.cardColors(
                             containerColor = if (order.status == "ASSIGNED") Color(0xFFE91E63) else Color.White
                         ),
-                        elevation = CardDefaults.cardElevation(12.dp)
+                        elevation = CardDefaults.cardElevation(12.adaptiveDp())
                     ) {
-                        Column(modifier = Modifier.padding(20.dp)) {
+                        Column(modifier = Modifier.padding(20.adaptiveDp())) {
                             if (order.status == "ASSIGNED") { // ← НОВЫЙ ЗАКАЗ
                                 Text(
                                     "Новый заказ!",
                                     color = Color.White,
-                                    fontSize = 24.sp,
+                                    fontSize = 24.adaptiveSp(),
                                     fontWeight = FontWeight.Bold
                                 )
-                                Spacer(Modifier.height(12.dp))
+                                Spacer(Modifier.height(12.adaptiveDp()))
                                 Text("Откуда: ${order.startAddress}", color = Color.White)
                                 Text("Куда: ${order.endAddress}", color = Color.White)
                                 Log.d(TAG, "Цена за поездку ==== ${order.price}")
@@ -708,11 +711,11 @@ fun DriverHomeScreen(navController: NavController) {
                                         "Цена: ${order.price} ₽"
                                     },
                                     color = Color.White,
-                                    fontSize = 20.sp,
+                                    fontSize = 20.adaptiveSp(),
                                     fontWeight = FontWeight.Bold
                                 )
-                                Spacer(Modifier.height(20.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                Spacer(Modifier.height(20.adaptiveDp()))
+                                Row(horizontalArrangement = Arrangement.spacedBy(16.adaptiveDp())) {
                                     Button(
                                         onClick = {
                                             stopNotificationSound()
@@ -748,12 +751,12 @@ fun DriverHomeScreen(navController: NavController) {
                             } else { // ← АКТИВНЫЙ ЗАКАЗ
                                 Text("Заказ принят",
                                     color = Color.Green,
-                                    fontSize = 22.sp,
+                                    fontSize = 22.adaptiveSp(),
                                     fontWeight = FontWeight.Bold
                                 )
-                                Spacer(Modifier.height(12.dp))
+                                Spacer(Modifier.height(12.adaptiveDp()))
                                 Text("Пассажир: ${order.passengerName}")
-                                Text("Телефон: ${order.passengerPhone}",
+                                /** Text("Телефон: ${order.passengerPhone}",
                                     color = Color.Blue,
                                     modifier = Modifier.clickable {
                                         context.startActivity(
@@ -763,11 +766,11 @@ fun DriverHomeScreen(navController: NavController) {
                                             )
                                         )
                                     }
-                                )
+                                ) */
                                 Text("Откуда: ${order.startAddress}")
                                 Text("Куда: ${order.endAddress}")
 
-                                Spacer(Modifier.height(8.dp))
+                                Spacer(Modifier.height(8.adaptiveDp()))
 
                                 Button(
                                     onClick = {
@@ -786,9 +789,9 @@ fun DriverHomeScreen(navController: NavController) {
                                         imageVector = Icons.Default.LocationOn,
                                         contentDescription = null,
                                         tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(18.adaptiveDp())
                                     )
-                                    Spacer(Modifier.width(8.dp))
+                                    Spacer(Modifier.width(8.adaptiveDp()))
                                     Text(
                                         text = if (!isPickedUp) "Навигация к пассажиру" else "Навигация к цели",
                                         color = Color.White,
@@ -796,7 +799,7 @@ fun DriverHomeScreen(navController: NavController) {
                                     )
                                 }
 
-                                Spacer(Modifier.height(16.dp))
+                                Spacer(Modifier.height(16.adaptiveDp()))
                                 when {
                                     isPickedUp -> {
                                         Button(
@@ -851,7 +854,7 @@ fun DriverHomeScreen(navController: NavController) {
                                             modifier = Modifier.fillMaxWidth(),
                                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE91E63))
                                         ) {
-                                            Text("Завершить заказ", color = Color.White, fontSize = 18.sp)
+                                            Text("Завершить заказ", color = Color.White, fontSize = 18.adaptiveSp())
                                         }
                                     }
                                     isArrived -> {
@@ -863,7 +866,7 @@ fun DriverHomeScreen(navController: NavController) {
                                                     text = "Бесплатное ожидание: %02d:%02d".format(mins, secs),
                                                     color = Color(0xFF4CAF50),
                                                     fontWeight = FontWeight.Bold,
-                                                    fontSize = 16.sp
+                                                    fontSize = 16.adaptiveSp()
                                                 )
                                             }
                                             is WaitingState.PaidWaiting -> {
@@ -874,12 +877,12 @@ fun DriverHomeScreen(navController: NavController) {
                                                         text = "Платное ожидание: %02d:%02d".format(mins, secs),
                                                         color = Color(0xFFFF9800),
                                                         fontWeight = FontWeight.Bold,
-                                                        fontSize = 16.sp
+                                                        fontSize = 16.adaptiveSp()
                                                     )
                                                     Text(
                                                         text = "Максимум 15 минут",
                                                         color = Color.Gray,
-                                                        fontSize = 12.sp
+                                                        fontSize = 12.adaptiveSp()
                                                     )
                                                 }
                                             }
@@ -898,13 +901,13 @@ fun DriverHomeScreen(navController: NavController) {
                                                     text = "Ожидание истекло — заказ завершается",
                                                     color = Color.Red,
                                                     fontWeight = FontWeight.Bold,
-                                                    fontSize = 16.sp
+                                                    fontSize = 16.adaptiveSp()
                                                 )
                                             }
                                             else -> {}
                                         }
 
-                                        Spacer(Modifier.height(12.dp))
+                                        Spacer(Modifier.height(12.adaptiveDp()))
                                         Button(
                                             onClick = {
                                                 scope.launch {
@@ -970,19 +973,25 @@ fun DriverHomeScreen(navController: NavController) {
                         }
                     }
                 }
+
+                CallOperatorButton(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(16.adaptiveDp())
+                )
                 if (currentOrder == null) {
                     FloatingActionButton(
                         onClick = { showCreateOrderSheet = true },
                         modifier = Modifier
                             .align(Alignment.BottomStart)
-                            .padding(16.dp),
+                            .padding(16.adaptiveDp()),
                         containerColor = Color(0xFF4CAF50),
                         contentColor = Color.White
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Создать заказ",
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(28.adaptiveDp())
                         )
                     }
                 }
@@ -995,15 +1004,15 @@ fun DriverHomeScreen(navController: NavController) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp)
+                                .padding(16.adaptiveDp())
                                 .navigationBarsPadding()
                         ) {
                             Text(
                                 "Создать заказ",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp
+                                fontSize = 20.adaptiveSp()
                             )
-                            Spacer(Modifier.height(16.dp))
+                            Spacer(Modifier.height(16.adaptiveDp()))
 
                             // Поле Откуда
                             OutlinedTextField(
@@ -1016,7 +1025,7 @@ fun DriverHomeScreen(navController: NavController) {
                                 singleLine = true
                             )
                             if (createFocusedField == "from" && createFromSuggestions.isNotEmpty()) {
-                                LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                                LazyColumn(modifier = Modifier.heightIn(max = 200.adaptiveDp())) {
                                     items(createFromSuggestions) { item ->
                                         val text = item.displayText ?: item.title.text
                                         Text(
@@ -1028,14 +1037,14 @@ fun DriverHomeScreen(navController: NavController) {
                                                     createFromPoint = item.center
                                                     createFocusedField = null
                                                 }
-                                                .padding(12.dp)
+                                                .padding(12.adaptiveDp())
                                         )
                                         HorizontalDivider()
                                     }
                                 }
                             }
 
-                            Spacer(Modifier.height(12.dp))
+                            Spacer(Modifier.height(12.adaptiveDp()))
 
                             // Поле Куда
                             OutlinedTextField(
@@ -1048,7 +1057,7 @@ fun DriverHomeScreen(navController: NavController) {
                                 singleLine = true
                             )
                             if (createFocusedField == "to" && createToSuggestions.isNotEmpty()) {
-                                LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                                LazyColumn(modifier = Modifier.heightIn(max = 200.adaptiveDp())) {
                                     items(createToSuggestions) { item ->
                                         val text = item.displayText ?: item.title.text
                                         Text(
@@ -1060,14 +1069,14 @@ fun DriverHomeScreen(navController: NavController) {
                                                     createToPoint = item.center
                                                     createFocusedField = null
                                                 }
-                                                .padding(12.dp)
+                                                .padding(12.adaptiveDp())
                                         )
                                         HorizontalDivider()
                                     }
                                 }
                             }
 
-                            Spacer(Modifier.height(20.dp))
+                            Spacer(Modifier.height(20.adaptiveDp()))
 
                             Button(
                                 onClick = {
@@ -1111,7 +1120,7 @@ fun DriverHomeScreen(navController: NavController) {
                             ) {
                                 if (isCreatingOrder) {
                                     CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
+                                        modifier = Modifier.size(20.adaptiveDp()),
                                         color = Color.White
                                     )
                                 } else {
@@ -1126,7 +1135,7 @@ fun DriverHomeScreen(navController: NavController) {
                         onDismissRequest = { showTimeToArriveDialog = false },
                         title = { Text("Время до прибытия", fontWeight = FontWeight.Bold) },
                         text = {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.adaptiveDp())) {
                                 listOf("5 минут", "10 минут", "15+ минут").forEach { time ->
                                     Button(
                                         onClick = {

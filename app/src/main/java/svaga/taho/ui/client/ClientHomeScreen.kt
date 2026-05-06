@@ -46,6 +46,7 @@ import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.CreateOrderRequest
 import svaga.taho.di.AppModule
 import svaga.taho.ui.auth.AuthViewModel
+import svaga.taho.ui.components.CallOperatorButton
 import svaga.taho.ui.menu.AppDrawerContent
 import svaga.taho.util.adaptiveDp
 import svaga.taho.util.adaptiveSp
@@ -458,7 +459,11 @@ fun ClientHomeScreen(navController: NavController) {
                     }
                 )
 
-
+                CallOperatorButton(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(16.adaptiveDp())
+                )
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -466,6 +471,7 @@ fun ClientHomeScreen(navController: NavController) {
                         .background(Color.White)
                         .padding(16.adaptiveDp())
                 ) {
+
 
                     completionState?.let { completion ->
                         Card(
@@ -667,7 +673,7 @@ fun ClientHomeScreen(navController: NavController) {
                                     Text("Водитель: $name", fontWeight = FontWeight.Medium, fontSize = 18.adaptiveSp())
                                 }
 
-                                driverPhone?.let { phone ->
+                              /**  driverPhone?.let { phone ->
                                     Spacer(Modifier.height(4.adaptiveDp()))
                                     Text(
                                         text = "Телефон: $phone",
@@ -677,7 +683,7 @@ fun ClientHomeScreen(navController: NavController) {
                                             context.startActivity(intent)
                                         }
                                     )
-                                }
+                                } */
 
                                 Spacer(Modifier.height(16.adaptiveDp()))
 
@@ -961,6 +967,7 @@ fun ClientHomeScreen(navController: NavController) {
                         }
                     }
                 }
+
             }
         }
     }
