@@ -129,7 +129,7 @@ data class RegisterRequest(
     val name: String,
     val password: String,
     val role: String,
-    val code: String
+   // val code: String
 )
 
 data class LoginRequest(

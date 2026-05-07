@@ -99,7 +99,7 @@ class AuthViewModel @Inject constructor(
                 val response = api.register(
                     RegisterRequest(
                         phone = phone,
-                        code = code,
+                       // code = code,
                         name = name,
                         password = password,
                         role = "CLIENT"
@@ -123,7 +123,7 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    /*fun register(phone: String, name: String, password: String) {
+    fun register(phone: String, name: String, password: String) {
         viewModelScope.launch {
             _event.emit(AuthEvent.Loading)
             try {
@@ -153,7 +153,7 @@ class AuthViewModel @Inject constructor(
                 _event.emit(AuthEvent.Error("Что-то пошло не так"))
             }
         }
-    }*/
+    }
 
     fun login(phone: String, password: String) {
         viewModelScope.launch {
