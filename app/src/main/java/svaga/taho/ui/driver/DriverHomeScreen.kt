@@ -233,6 +233,7 @@ fun DriverHomeScreen(navController: NavController) {
 
     // 1. ПОДПИСКА НА НОВЫЕ ЗАКАЗЫ — ВСЕГДА!
     // Читаем новые заказы и обновления из шины — сервис пишет сюда
+    // 1. ПОДПИСКА НА НОВЫЕ ЗАКАЗЫ — ВСЕГДА!
     LaunchedEffect(Unit) {
         sseEventBus.events.collect { json ->
             val myPos = json.optInt("myPosition", -1)
@@ -243,59 +244,69 @@ fun DriverHomeScreen(navController: NavController) {
             }
 
             val status = json.optString("status", "UNKNOWN")
-            Log.d(TAG, "EventBus DRIVER → status: $status | currentOrder: ${currentOrder?.id}")
+            Log.d(TAG, "=== SSE EVENT === status: $status | currentOrder.id=${currentOrder?.id} | currentOrder.status=${currentOrder?.status} | json=$json")
 
-            // Если есть активный заказ — это обновление статуса, не новый заказ
+            // Если есть активный заказ — обновление его статуса
             if (currentOrder?.status in listOf("ACCEPTED", "PICKED_UP", "ARRIVED", "IN_PROGRESS")) {
+                Log.d(TAG, "Обработка как обновление активного заказа")
                 when (status) {
                     "CANCELLED", "COMPLETED" -> {
+                        Log.d(TAG, "Завершение заказа → полный сброс")
                         driverViewModel.resetOrderStates()
+                        stopNotificationSound()
+
                         scope.launch {
-                            delay(500)
+                            delay(1000)
                             loadDriverProfile()
-                            if (driverStatus != "OFFLINE") {
-                                TahoSseService.start(context, orderId = "driver", role = "DRIVER")
-                            }
+                            TahoSseService.start(context, orderId = "driver", role = "DRIVER")
                         }
                     }
-                    "ARRIVED"   -> driverViewModel.setArrived(true)
+                    "ARRIVED" -> driverViewModel.setArrived(true)
                     "PICKED_UP" -> {
                         driverViewModel.setPickedUp(true)
                         if (shouldTrack && !isTracking) {
                             driverViewModel.setTracking(true)
-                            TrackManager.startTracking(
-                                context     = context,
-                                onPointAdded = { point -> Log.d(TAG, "Точка: ${point.latitude}, ${point.longitude}") },
-                                onError      = { error -> Toast.makeText(context, "Ошибка трека: $error", Toast.LENGTH_SHORT).show() }
-                            )
+                            TrackManager.startTracking(context, onPointAdded = {}, onError = {})
                         }
                     }
-                    "IN_PROGRESS" -> Log.d(TAG, "В процессе")
                 }
                 return@collect
             }
 
-            // Нет активного заказа — это новый входящий заказ
+            // ←←← НОВЫЙ ЗАКАЗ
             if (status == "ASSIGNED" || json.has("id")) {
+                Log.d(TAG, "ДЕТЕКТИРОВАН НОВЫЙ ЗАКАЗ ASSIGNED!")
+
                 val order = runCatching {
                     DriverOrder(
-                        id            = json.getString("id"),
-                        startPoint    = json.getString("startPoint"),
-                        endPoint      = json.getString("endPoint"),
-                        startAddress  = json.getString("startAddress"),
-                        endAddress    = json.getString("endAddress"),
+                        id = json.getString("id"),
+                        startPoint = json.getString("startPoint"),
+                        endPoint = json.getString("endPoint"),
+                        startAddress = json.getString("startAddress"),
+                        endAddress = json.getString("endAddress"),
                         passengerName = json.getString("passengerName"),
-                        passengerPhone= json.getString("passengerPhone"),
-                        price         = json.getString("price"),
-                        distance      = json.getString("distance"),
-                        status        = "ASSIGNED",
-                        inCity        = json.optBoolean("inCity", true)
+                        passengerPhone = json.getString("passengerPhone"),
+                        price = json.optString("price"),
+                        distance = json.optString("distance"),
+                        status = "ASSIGNED",
+                        inCity = json.optBoolean("inCity", true)
                     )
-                }.getOrNull() ?: return@collect
+                }.getOrNull()
 
+                if (order == null) {
+                    Log.e(TAG, "Не удалось распарсить новый заказ")
+                    return@collect
+                }
+
+                Log.d(TAG, "Новый заказ успешно распарсен: ${order.id} от ${order.startAddress} → ${order.endAddress}")
+
+                // Критично: полный сброс перед новым заказом
+                driverViewModel.resetOrderStates()
                 driverViewModel.setCurrentOrder(order)
                 driverViewModel.setShouldTrack(!order.inCity)
+
                 playRepeatingNotificationSound(context)
+                Log.d(TAG, "✅ НОВЫЙ ЗАКАЗ УСТАНОВЛЕН В VIEWMODEL")
             }
         }
     }

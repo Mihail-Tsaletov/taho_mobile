@@ -126,7 +126,6 @@ class TahoSseService : Service() {
                 token   = token,
                 scope   = serviceScope,
                 onUpdate = { json ->
-                    if (isShuttingDown) return@subscribe
                     val status      = json.optString("status").takeIf { it.isNotBlank() } ?: return@subscribe
                     val driverName  = json.optString("driverName").takeIf { it.isNotBlank() }
                     val timeToArrive= json.optString("timeToArrive").takeIf { it.isNotBlank() }
