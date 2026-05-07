@@ -22,6 +22,8 @@ private const val TAG = "TahoSseService"
 const val EXTRA_ORDER_ID  = "extra_order_id"
 const val EXTRA_ROLE      = "extra_role"   // "DRIVER" или "PASSENGER"
 
+private var isShuttingDown = false
+
 /**
  * Foreground Service — держит SSE соединение живым когда приложение в фоне.
  *
@@ -92,6 +94,7 @@ class TahoSseService : Service() {
     }
 
     override fun onDestroy() {
+        isShuttingDown = false
         super.onDestroy()
         sseJob?.cancel()
         serviceScope.cancel()
@@ -123,6 +126,7 @@ class TahoSseService : Service() {
                 token   = token,
                 scope   = serviceScope,
                 onUpdate = { json ->
+                    if (isShuttingDown) return@subscribe
                     val status      = json.optString("status").takeIf { it.isNotBlank() } ?: return@subscribe
                     val driverName  = json.optString("driverName").takeIf { it.isNotBlank() }
                     val timeToArrive= json.optString("timeToArrive").takeIf { it.isNotBlank() }
@@ -141,8 +145,22 @@ class TahoSseService : Service() {
 
                     // Останавливаем сервис когда заказ завершён
                     if (status in listOf("COMPLETED", "CANCELLED", "REJECTED")) {
-                        Log.d(TAG, "Заказ завершён — останавливаем сервис")
-                        stopSelf()
+                        isShuttingDown = true
+                        Log.d(TAG, "Заказ завершён — останавливаем сервис с задержкой")
+                        serviceScope.launch {
+                            delay(500) // даём время UI получить событие через шину
+                            if (role == "DRIVER") {
+                                Log.d(TAG, "Водитель на линии — перезапускаем подписку на новые заказы")
+                                TahoSseService.start(
+                                    context = applicationContext,           // ← исправлено
+                                    orderId = "driver",
+                                    role = "DRIVER"
+                                )
+                            } else {
+                                Log.d(TAG, "Пассажир — полностью останавливаем сервис")
+                                stopSelf()
+                            }
+                        }
                     }
                 },
                 onError = { e ->

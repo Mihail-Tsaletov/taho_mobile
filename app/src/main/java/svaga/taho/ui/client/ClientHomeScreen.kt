@@ -208,8 +208,8 @@ fun ClientHomeScreen(navController: NavController) {
             }
             "ASSIGNED"              -> clientViewModel.setStatus("Водитель назначен")
             "COMPLETED"             -> {
-                TahoSseService.stop(context)
                 clientViewModel.onTripCompleted(order.price ?: "По тарифу")
+                TahoSseService.stop(context)
                 activeOrderManager.clear()
                 return@LaunchedEffect
             }
@@ -235,7 +235,7 @@ fun ClientHomeScreen(navController: NavController) {
     LaunchedEffect(Unit) {
         sseEventBus.events.collect { json ->
             val status = json.optString("status").takeIf { it.isNotBlank() } ?: return@collect
-            Log.d(TAG, "EventBus → status: $status")
+            Log.d(TAG, "EventBus → status: $status   $json")
 
             json.optString("timeToArrive").takeIf { it.isNotBlank() }?.let {
                 clientViewModel.setTimeToArrive(it)
@@ -243,8 +243,19 @@ fun ClientHomeScreen(navController: NavController) {
 
             when (status) {
                 "COMPLETED" -> {
-                    val finalPrice = json.optString("price").takeIf { it.isNotBlank() }
-                        ?: activeOrder?.price ?: "По тарифу"
+                    delay(300) // небольшая задержка, чтобы дать прийти событию с ценой
+
+                    val rawPriceFromEvent = json.optString("price").takeIf { it.isNotBlank() && it != "null" }
+                    val priceFromActiveOrder = activeOrder?.price?.takeIf { it.isNotBlank() && it != "null" }
+
+                    val finalPrice = when {
+                        rawPriceFromEvent != null -> rawPriceFromEvent
+                        priceFromActiveOrder != null -> priceFromActiveOrder
+                        else -> "По тарифу"
+                    }
+
+                    Log.d(TAG, "COMPLETED → finalPrice='$finalPrice' (from event: $rawPriceFromEvent, from active: $priceFromActiveOrder)")
+
                     clientViewModel.onTripCompleted(finalPrice)
                     activeOrderManager.clear()
                     TahoSseService.stop(context)

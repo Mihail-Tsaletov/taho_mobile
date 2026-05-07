@@ -253,6 +253,9 @@ fun DriverHomeScreen(navController: NavController) {
                         scope.launch {
                             delay(500)
                             loadDriverProfile()
+                            if (driverStatus != "OFFLINE") {
+                                TahoSseService.start(context, orderId = "driver", role = "DRIVER")
+                            }
                         }
                     }
                     "ARRIVED"   -> driverViewModel.setArrived(true)

@@ -119,7 +119,12 @@ class SseClient @Inject constructor(
 
                 try {
                     val json = JSONObject(jsonString)
-                    withContext(Dispatchers.Main) { onUpdate(json) }
+                    if (currentCoroutineContext().isActive) {  // ← проверяем перед withContext
+                        withContext(Dispatchers.Main) { onUpdate(json) }
+                    }
+                } catch (e: CancellationException) {
+                    // Корутина отменена — молча выходим, это нормально
+                    break
                 } catch (e: Exception) {
                     Log.e(TAG, "JSON parse error: $jsonString", e)
                 }
