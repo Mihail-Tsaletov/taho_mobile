@@ -1,6 +1,7 @@
 package svaga.taho
 
 import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -26,6 +27,14 @@ class MainActivity : ComponentActivity() {
         android.util.Log.d("MainActivity", "Геолокация разрешена: $granted")
     }
 
+    private val notificationPermissionRequest = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        android.util.Log.d("MainActivity", "Уведомления разрешены: $granted")
+    }
+
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -36,6 +45,9 @@ class MainActivity : ComponentActivity() {
                 Manifest.permission.ACCESS_COARSE_LOCATION
             )
         )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionRequest.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
 
         setContent {
             TahoTheme {

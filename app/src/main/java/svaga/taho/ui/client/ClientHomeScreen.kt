@@ -45,6 +45,7 @@ import kotlinx.coroutines.delay
 import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.CreateOrderRequest
 import svaga.taho.di.AppModule
+import svaga.taho.service.TahoSseService
 import svaga.taho.ui.auth.AuthViewModel
 import svaga.taho.ui.components.CallOperatorButton
 import svaga.taho.ui.menu.AppDrawerContent
@@ -54,7 +55,6 @@ import kotlin.coroutines.resume
 
 private const val TAG = "ClientHomeScreen"
 
-private var sseJob by mutableStateOf<Job?>(null)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -114,12 +114,11 @@ fun ClientHomeScreen(navController: NavController) {
     //Цена заказа предварительно
     var calculatedPrice by remember { mutableStateOf<Double?>(null) }
 
-    // SSE и API
-    val sseClient = remember {
+    val sseEventBus = remember {
         EntryPointAccessors.fromApplication(
             context.applicationContext,
             AppModule.ApiProvider::class.java
-        ).sseClient()
+        ).sseEventBus()
     }
 
     val token by EntryPointAccessors.fromApplication(
@@ -189,18 +188,17 @@ fun ClientHomeScreen(navController: NavController) {
 
     // Запуск SSE только когда есть активный заказ И он ещё не завершён
     // ← ЗАПУСК SSE + УСТАНОВКА НАЧАЛЬНОГО СОСТОЯНИЯ
+    // Устанавливаем начальное состояние из загруженного активного заказа
     LaunchedEffect(activeOrder?.id, token) {
         val order = activeOrder ?: return@LaunchedEffect
 
-        Log.d(TAG, "LaunchedEffect: активный заказ загружен → ID=${order.id}, status=${order.status}")
+        Log.d(TAG, "Активный заказ: ID=${order.id}, status=${order.status}")
 
-        // === ВАЖНО: Устанавливаем все данные сразу ===
         fromAddress = order.startAddress
         toAddress = order.endAddress
         clientViewModel.setShowOrderDetails(true)
         clientViewModel.setDriverInfo(order.driverName, order.driverPhone)
 
-        // Устанавливаем корректный начальный статус из базы
         when (order.status) {
             "ACCEPTED", "PICKED_UP" -> clientViewModel.setStatus("Заказ принят")
             "ARRIVED"               -> clientViewModel.setStatus("Водитель на месте")
@@ -210,11 +208,13 @@ fun ClientHomeScreen(navController: NavController) {
             }
             "ASSIGNED"              -> clientViewModel.setStatus("Водитель назначен")
             "COMPLETED"             -> {
+                TahoSseService.stop(context)
                 clientViewModel.onTripCompleted(order.price ?: "По тарифу")
                 activeOrderManager.clear()
                 return@LaunchedEffect
             }
             "CANCELLED"             -> {
+                TahoSseService.stop(context)
                 clientViewModel.onOrderCancelled()
                 activeOrderManager.clear()
                 return@LaunchedEffect
@@ -224,82 +224,63 @@ fun ClientHomeScreen(navController: NavController) {
                 activeOrderManager.clear()
                 return@LaunchedEffect
             }
-            else                    -> clientViewModel.setStatus("В обработке") // fallback
+            else -> clientViewModel.setStatus("В обработке")
         }
 
-        // Если заказ уже завершён — SSE не запускаем
-        if (order.status in listOf("COMPLETED", "CANCELLED", "REJECTED")) {
-            return@LaunchedEffect
-        }
+        // Запускаем фоновый сервис — он держит SSE и показывает уведомления
+        TahoSseService.start(context, orderId = order.id, role = "PASSENGER")
+    }
 
-        // === Запускаем SSE ===
-        Log.d(TAG, "Запускаем SSE для заказа ${order.id} (status: ${order.status})")
+// Читаем события из шины — сервис пишет сюда, UI обновляется здесь
+    LaunchedEffect(Unit) {
+        sseEventBus.events.collect { json ->
+            val status = json.optString("status").takeIf { it.isNotBlank() } ?: return@collect
+            Log.d(TAG, "EventBus → status: $status")
 
-        sseJob?.cancel()
+            json.optString("timeToArrive").takeIf { it.isNotBlank() }?.let {
+                clientViewModel.setTimeToArrive(it)
+            }
 
-        sseJob = coroutineScope.launch {
-            sseClient.subscribe(
-                orderId = order.id,
-                token = token,
-                scope = this,
-                onUpdate = { json ->
-                    val status = json.optString("status", "")
-                    Log.d(TAG, "SSE → status: $status | json: $json")
-
-                    json.optString("timeToArrive").takeIf { it.isNotBlank() }?.let {
-                        clientViewModel.setTimeToArrive(it)
-                    }
-
-                    if (status.isNotEmpty()) {
-                        when (status) {
-                            "COMPLETED" -> {
-                                coroutineScope.launch {
-                                    delay(300)
-                                    activeOrderManager.loadActiveOrderForClient()
-                                    val finalPrice = json.optString("price").takeIf { it.isNotBlank() }
-                                        ?: order.price?.takeIf { it.isNotBlank() }
-                                        ?: "По тарифу"
-
-                                    clientViewModel.onTripCompleted(finalPrice)
-                                    activeOrderManager.clear()
-                                    sseClient.disconnect()
-                                }
-                            }
-                            "CANCELLED" -> {
-                                clientViewModel.onOrderCancelled()
-                                activeOrderManager.clear()
-                            }
-                            "REJECTED" -> {
-                                clientViewModel.onOrderRejected()
-                                activeOrderManager.clear()
-                            }
-                            else -> {
-                                when (status) {
-                                    "ACCEPTED", "PICKED_UP" -> clientViewModel.setStatus("Заказ принят")
-                                    "ARRIVED"               -> clientViewModel.setStatus("Водитель на месте")
-                                    "IN_PROGRESS"           -> {
-                                        clientViewModel.setStatus("В пути")
-                                        clientViewModel.onTripStarted()
-                                    }
-                                    "ASSIGNED" -> clientViewModel.setStatus("Водитель назначен")
-                                    else -> clientViewModel.setStatus("Статус: $status")
-                                }
-                            }
+            when (status) {
+                "COMPLETED" -> {
+                    val finalPrice = json.optString("price").takeIf { it.isNotBlank() }
+                        ?: activeOrder?.price ?: "По тарифу"
+                    clientViewModel.onTripCompleted(finalPrice)
+                    activeOrderManager.clear()
+                    TahoSseService.stop(context)
+                }
+                "CANCELLED" -> {
+                    clientViewModel.onOrderCancelled()
+                    activeOrderManager.clear()
+                    clientViewModel.setTimeToArrive(null)
+                    TahoSseService.stop(context)
+                }
+                "REJECTED" -> {
+                    clientViewModel.onOrderRejected()
+                    activeOrderManager.clear()
+                    TahoSseService.stop(context)
+                }
+                else -> {
+                    when (status) {
+                        "ACCEPTED", "PICKED_UP" -> clientViewModel.setStatus("Заказ принят")
+                        "ARRIVED"               -> clientViewModel.setStatus("Водитель на месте")
+                        "IN_PROGRESS"           -> {
+                            clientViewModel.setStatus("В пути")
+                            clientViewModel.onTripStarted()
                         }
+                        "ASSIGNED" -> clientViewModel.setStatus("Водитель назначен")
+                        else       -> clientViewModel.setStatus("Статус: $status")
                     }
-
-                    // Обновление информации о водителе
-                    val newDriverName = json.optString("driverName").takeIf { it.isNotBlank() }
+                    val newDriverName  = json.optString("driverName").takeIf { it.isNotBlank() }
                     val newDriverPhone = json.optString("driverPhone").takeIf { it.isNotBlank() }
                     if (newDriverName != null || newDriverPhone != null) {
                         clientViewModel.setDriverInfo(
-                            newDriverName ?: driverName,
+                            newDriverName  ?: driverName,
                             newDriverPhone ?: driverPhone
                         )
                     }
-                },
-                onError = { e -> Log.e(TAG, "SSE ошибка", e) }
-            )
+                }
+            }
         }
     }
 
@@ -405,8 +386,6 @@ fun ClientHomeScreen(navController: NavController) {
     DisposableEffect(Unit) {
         MapKitFactory.initialize(context)
         onDispose {
-            sseJob?.cancel()
-            sseJob = null
             mapViewState.value?.mapWindow?.map?.removeInputListener(mapInputListener)
             mapViewState.value?.onStop()
             MapKitFactory.getInstance().onStop()
@@ -856,16 +835,14 @@ fun ClientHomeScreen(navController: NavController) {
                                     isOrderPlaced = true
 
                                     val startStr = fromPoint?.let { "${it.latitude}, ${it.longitude}" } ?: ""
-                                    val endStr = toPoint?.let { "${it.latitude}, ${it.longitude}" } ?: ""
+                                    val endStr   = toPoint?.let   { "${it.latitude}, ${it.longitude}" } ?: ""
 
                                     val request = CreateOrderRequest(
-                                        startPoint = startStr,
-                                        endPoint = endStr,
+                                        startPoint   = startStr,
+                                        endPoint     = endStr,
                                         startAddress = fromAddress,
-                                        endAddress = toAddress
+                                        endAddress   = toAddress
                                     )
-
-                                    Log.d(TAG, "Создаём заказ: $request")
 
                                     try {
                                         val api = EntryPointAccessors.fromApplication(
@@ -873,82 +850,20 @@ fun ClientHomeScreen(navController: NavController) {
                                             AppModule.ApiProvider::class.java
                                         ).apiService()
 
-                                        Log.d(TAG, "Токен: Bearer $token")
                                         val response = api.createOrder("Bearer $token", request)
-
-                                        val orderId = response.body()?.string()?.trim('"')
+                                        val orderId  = response.body()?.string()?.trim('"')
                                             ?: throw Exception("Сервер вернул пустой ответ")
 
                                         Log.d(TAG, "Заказ создан → ID: $orderId")
 
-                                        // Запуск SSE (как было раньше)
-                                        sseJob?.cancel()
-                                        sseJob = coroutineScope.launch {
-                                            sseClient.subscribe(
-                                                orderId = orderId,
-                                                token = token,
-                                                scope = coroutineScope,
-                                                onUpdate = { json ->
-                                                    val status = json.optString("status", "")
-                                                    json.optString("timeToArrive").takeIf { it.isNotBlank() }?.let {
-                                                        clientViewModel.setTimeToArrive(it)
-                                                    }
-                                                    Log.d(TAG, "SSE onUpdate: $status")
-                                                    if (status.isNotEmpty()) {
-                                                        when (status) {
-                                                            "COMPLETED" -> {
-                                                                coroutineScope.launch {
-                                                                    // Перезагружаем заказ перед очисткой
-                                                                    activeOrderManager.loadActiveOrderForClient()
-                                                                    clientViewModel.setTimeToArrive(null)
-                                                                    delay(300)
+                                        // Запускаем сервис — он подпишется на SSE и будет слать события в шину
+                                        TahoSseService.start(context, orderId = orderId, role = "PASSENGER")
 
-                                                                    val finalPrice = json.optString("price").takeIf { it.isNotBlank() }
-                                                                        ?: activeOrder?.price?.takeIf { it.isNotBlank() }
-                                                                        ?: "По тарифу"
-
-                                                                    Log.d(TAG, "SSE COMPLETED → price после reload: $finalPrice | json: $json | activeOrder.price: ${activeOrder?.price}")
-
-                                                                    clientViewModel.onTripCompleted(finalPrice)
-                                                                    activeOrderManager.clear()
-                                                                    sseClient.disconnect()
-                                                                }
-                                                            }
-                                                            "CANCELLED" -> {
-                                                                clientViewModel.onOrderCancelled()
-                                                                activeOrderManager.clear()
-                                                                clientViewModel.setTimeToArrive(null)
-                                                            }
-                                                            else -> {
-                                                                when (status) {
-                                                                    "ACCEPTED", "PICKED_UP" -> clientViewModel.setStatus("Заказ принят")
-                                                                    "ARRIVED"               -> clientViewModel.setStatus("Водитель на месте")
-                                                                    "IN_PROGRESS"           -> {
-                                                                        clientViewModel.setStatus("В пути")
-                                                                        clientViewModel.onTripStarted()
-                                                                    }
-                                                                    "ASSIGNED"              -> clientViewModel.setStatus("Водитель назначен")
-                                                                    else                    -> clientViewModel.setStatus("Статус: $status")
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    json.optString("driverName").takeIf { it.isNotBlank() }?.let {
-                                                        clientViewModel.setDriverInfo(it, driverPhone)
-                                                    }
-                                                    json.optString("driverPhone").takeIf { it.isNotBlank() }?.let {
-                                                        clientViewModel.setDriverInfo(driverName, it)
-                                                    }
-                                                },
-                                                onError = { Log.e(TAG, "SSE ошибка", it) }
-                                            )
-                                        }
                                         clientViewModel.setShowOrderDetails(true)
 
-                                        // ← Если хочешь сразу показать детали после создания
-                                        // showOrderDetails = true   // раскомментируй, если нужно
                                     } catch (e: Exception) {
                                         Log.e(TAG, "Ошибка при создании заказа", e)
+                                        isOrderPlaced = false
                                         Toast.makeText(context, "Не удалось создать заказ: ${e.message}", Toast.LENGTH_LONG).show()
                                     }
                                 }

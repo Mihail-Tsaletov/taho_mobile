@@ -3,6 +3,7 @@ package svaga.taho
 import android.app.Application
 import com.yandex.mapkit.MapKitFactory
 import dagger.hilt.android.HiltAndroidApp
+import svaga.taho.util.notifications.TahoNotificationHelper
 
 @HiltAndroidApp
 class TahoApplication : Application() {
@@ -14,5 +15,6 @@ class TahoApplication : Application() {
         MapKitFactory.setApiKey("3e3bc109-bcb9-4398-bf6e-f7bf0e760960")
         MapKitFactory.setLocale("ru_RU")
         MapKitFactory.initialize(this)
+        TahoNotificationHelper.createChannels(this)
     }
 }

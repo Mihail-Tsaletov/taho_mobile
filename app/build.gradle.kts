@@ -4,8 +4,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.hilt)             // ← Hilt плагин
     alias(libs.plugins.kotlin.ksp)
+    id("com.google.dagger.hilt.android")
 }
 
 android {
@@ -70,8 +70,8 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
 
     // Hilt
-    implementation(libs.hilt.android)
-    ksp(libs.hilt.compiler)                      // ← KSP вместо kapt
+    implementation("com.google.dagger:hilt-android:2.56")
+    ksp("com.google.dagger:hilt-android-compiler:2.56")                     // ← KSP вместо kapt
     implementation(libs.hilt.navigation.compose)
 
     // Retrofit
@@ -94,4 +94,6 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+
 }

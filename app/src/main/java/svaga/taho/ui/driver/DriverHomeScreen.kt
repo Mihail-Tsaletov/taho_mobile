@@ -63,6 +63,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.foundation.lazy.items
 import svaga.taho.data.remote.CreateOrderRequest
+import svaga.taho.service.TahoSseService
 import svaga.taho.ui.components.CallOperatorButton
 import svaga.taho.util.adaptiveDp
 import svaga.taho.util.adaptiveSp
@@ -70,7 +71,6 @@ import svaga.taho.util.playRepeatingNotificationSound
 import svaga.taho.util.stopNotificationSound
 
 private const val TAG = "DriverHomeScreen"
-var sseJob by mutableStateOf<Job?>(null)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -126,12 +126,11 @@ fun DriverHomeScreen(navController: NavController) {
             .createSearchManager(SearchManagerType.COMBINED)
             .createSuggestSession()
     }
-
-    val sseClient = remember {
+    val sseEventBus = remember {
         EntryPointAccessors.fromApplication(
             context.applicationContext,
             AppModule.ApiProvider::class.java
-        ).sseClient()
+        ).sseEventBus()
     }
     val token by EntryPointAccessors.fromApplication(
         context.applicationContext,
@@ -211,76 +210,92 @@ fun DriverHomeScreen(navController: NavController) {
         }
     }
 
-    // 1. ПОДПИСКА НА НОВЫЕ ЗАКАЗЫ — ВСЕГДА!
-    LaunchedEffect(token) {
-        if (token.isNotEmpty()) {
-            Log.d(TAG, "LaunchedEffect(token) сработал → token не пустой")
-            newOrdersSseJob?.cancel()
-            Log.d(TAG, "Старая newOrdersSseJob отменена (если была)")
-            newOrdersSseJob = scope.launch {
-                Log.d(TAG, "СТАРТ ПОДПИСКИ НА DRIVER — job запущена")
-                try {
-                    sseClient.subscribe(
-                        orderId = "driver",
-                        token = token,
-                        scope = this,
-                        onUpdate = { json ->
-                            val myPos = json.optInt("myPosition", -1)
-                            if (myPos >= 0) {
-                                queuePosition = myPos
-                                Log.d(TAG, "Позиция в очереди: $myPos")
-                                return@subscribe  // ← не парсим как заказ
-                            }
-                            Log.d(TAG, "!!! SSE DRIVER RAW !!! → $json") // ← самый важный лог
-                            val parsedStatus = try {
-                                json.optString("status", "UNKNOWN")
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Ошибка парсинга json в driver SSE", e)
-                                return@subscribe
-                            }
-                            Log.d(TAG, "Получен статус в driver: $parsedStatus | currentOrder = ${currentOrder?.id} (${currentOrder?.status})")
-                            if (currentOrder?.status in listOf("ACCEPTED", "PICKED_UP", "ARRIVED", "IN_PROGRESS")) {
-                                Log.d(TAG, "Игнорируем новый заказ — активный уже есть")
-                                return@subscribe
-                            }
-                            Log.d(TAG, "Обрабатываем новый заказ как свободный!")
-
-
-                            val myPosition = json.optInt("myPosition", -1)
-                            if (myPosition > 0) {
-                                // обновляем позицию в очереди
-                                queuePosition = myPosition
-                            } else if (myPosition == 0) {
-                                queuePosition = 0
-                            }
-
-                            // дальше весь твой код парсинга DriverOrder
-                            val order = DriverOrder(
-                                id = json.getString("id"),
-                                startPoint = json.getString("startPoint"),
-                                endPoint = json.getString("endPoint"),
-                                startAddress = json.getString("startAddress"),
-                                endAddress = json.getString("endAddress"),
-                                passengerName = json.getString("passengerName"),
-                                passengerPhone = json.getString("passengerPhone"),
-                                price = json.getString("price"),
-                                distance = json.getString("distance"),
-                                status = "ASSIGNED",
-                                inCity = json.optBoolean("inCity", true)
-                            )
-                            driverViewModel.setCurrentOrder(order)
-                            driverViewModel.setShouldTrack(!order.inCity)
-                            playRepeatingNotificationSound(context)
-                        }
-                    )
-                    Log.d(TAG, "Подписка на driver запущена успешно")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Критическая ошибка в подписке driver", e)
-                }
+    suspend fun loadDriverProfile() {
+        try {
+            val profile = apiService.getDriverProfile("Bearer $token")
+            driverName = userName ?: "Имя не указано"
+            driverStatus = profile.status
+            tokenManager.saveDriverId(profile.driverId)
+            driverBalance = profile.balance  // ← берём баланс
+            parkName = when (profile.parkId) {
+                1 -> "Черема"
+                2 -> "Город"
+                else -> null
             }
-            Log.d(TAG, "newOrdersSseJob присвоена новая корутина")
-        } else {
-            Log.w(TAG, "Token пустой — подписка на driver НЕ запущена")
+            if (profile.status == "OFFLINE" || profile.parkId == null) {
+                parkName = null
+            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Ошибка загрузки профиля", e)
+            driverName = "Ошибка получения имени"
+            driverStatus = "СИСИ ПИСЬКИ ВРЫЗВ ПИПИСЬКИ"
+        }
+    }
+
+    // 1. ПОДПИСКА НА НОВЫЕ ЗАКАЗЫ — ВСЕГДА!
+    // Читаем новые заказы и обновления из шины — сервис пишет сюда
+    LaunchedEffect(Unit) {
+        sseEventBus.events.collect { json ->
+            val myPos = json.optInt("myPosition", -1)
+            if (myPos >= 0) {
+                queuePosition = myPos
+                Log.d(TAG, "Позиция в очереди: $myPos")
+                return@collect
+            }
+
+            val status = json.optString("status", "UNKNOWN")
+            Log.d(TAG, "EventBus DRIVER → status: $status | currentOrder: ${currentOrder?.id}")
+
+            // Если есть активный заказ — это обновление статуса, не новый заказ
+            if (currentOrder?.status in listOf("ACCEPTED", "PICKED_UP", "ARRIVED", "IN_PROGRESS")) {
+                when (status) {
+                    "CANCELLED", "COMPLETED" -> {
+                        driverViewModel.resetOrderStates()
+                        scope.launch {
+                            delay(500)
+                            loadDriverProfile()
+                        }
+                    }
+                    "ARRIVED"   -> driverViewModel.setArrived(true)
+                    "PICKED_UP" -> {
+                        driverViewModel.setPickedUp(true)
+                        if (shouldTrack && !isTracking) {
+                            driverViewModel.setTracking(true)
+                            TrackManager.startTracking(
+                                context     = context,
+                                onPointAdded = { point -> Log.d(TAG, "Точка: ${point.latitude}, ${point.longitude}") },
+                                onError      = { error -> Toast.makeText(context, "Ошибка трека: $error", Toast.LENGTH_SHORT).show() }
+                            )
+                        }
+                    }
+                    "IN_PROGRESS" -> Log.d(TAG, "В процессе")
+                }
+                return@collect
+            }
+
+            // Нет активного заказа — это новый входящий заказ
+            if (status == "ASSIGNED" || json.has("id")) {
+                val order = runCatching {
+                    DriverOrder(
+                        id            = json.getString("id"),
+                        startPoint    = json.getString("startPoint"),
+                        endPoint      = json.getString("endPoint"),
+                        startAddress  = json.getString("startAddress"),
+                        endAddress    = json.getString("endAddress"),
+                        passengerName = json.getString("passengerName"),
+                        passengerPhone= json.getString("passengerPhone"),
+                        price         = json.getString("price"),
+                        distance      = json.getString("distance"),
+                        status        = "ASSIGNED",
+                        inCity        = json.optBoolean("inCity", true)
+                    )
+                }.getOrNull() ?: return@collect
+
+                driverViewModel.setCurrentOrder(order)
+                driverViewModel.setShouldTrack(!order.inCity)
+                playRepeatingNotificationSound(context)
+            }
         }
     }
 
@@ -424,28 +439,7 @@ fun DriverHomeScreen(navController: NavController) {
     }
 
     // Функция загрузки профиля
-    suspend fun loadDriverProfile() {
-        try {
-            val profile = apiService.getDriverProfile("Bearer $token")
-            driverName = userName ?: "Имя не указано"
-            driverStatus = profile.status
-            tokenManager.saveDriverId(profile.driverId)
-            driverBalance = profile.balance  // ← берём баланс
-            parkName = when (profile.parkId) {
-                1 -> "Черема"
-                2 -> "Город"
-                else -> null
-            }
-            if (profile.status == "OFFLINE" || profile.parkId == null) {
-                parkName = null
-            }
 
-        } catch (e: Exception) {
-            Log.e(TAG, "Ошибка загрузки профиля", e)
-            driverName = "Ошибка получения имени"
-            driverStatus = "СИСИ ПИСЬКИ ВРЫЗВ ПИПИСЬКИ"
-        }
-    }
     // ФУНКЦИЯ ДЛЯ ПРИНЯТИЯ ЗАКАЗА
     val acceptOrder: (String) -> Unit = { timeToArrive ->
         currentOrder?.let { order ->
@@ -455,82 +449,11 @@ fun DriverHomeScreen(navController: NavController) {
                     stopNotificationSound()
                     apiService.acceptOrder("Bearer $token", order.id, timeToArrive)
                     driverViewModel.setCurrentOrder(order.copy(status = "ACCEPTED"))
-                    orderUpdatesSseJob?.cancel()
-                    orderUpdatesSseJob = scope.launch {
-                        sseClient.subscribe(
-                            orderId = order.id,
-                            token = token,
-                            scope = this,
-                            onUpdate = { json ->
-                                val status = json.optString("status")
-                                when (status) {
-                                    "CANCELLED", "COMPLETED" -> {
-                                        driverViewModel.resetOrderStates()
-                                        scope.launch {
-                                            delay(500)
-                                            loadDriverProfile()
-                                        }
-                                        orderUpdatesSseJob?.cancel()
-                                        scope.launch {
-                                            delay(500)
-                                            newOrdersSseJob?.cancel()
-                                            newOrdersSseJob = scope.launch {
-                                                sseClient.subscribe(
-                                                    orderId = "driver",
-                                                    token = token,
-                                                    scope = this,
-                                                    onUpdate = { json ->
-                                                        val myPos = json.optInt("myPosition", -1)
-                                                        if (myPos >= 0) {
-                                                            queuePosition = myPos
-                                                            return@subscribe
-                                                        }
-                                                        if (currentOrder?.status in listOf("ACCEPTED", "PICKED_UP", "ARRIVED", "IN_PROGRESS")) return@subscribe
-                                                        val newOrder = runCatching {
-                                                            DriverOrder(
-                                                                id = json.getString("id"),
-                                                                startPoint = json.getString("startPoint"),
-                                                                endPoint = json.getString("endPoint"),
-                                                                startAddress = json.getString("startAddress"),
-                                                                endAddress = json.getString("endAddress"),
-                                                                passengerName = json.getString("passengerName"),
-                                                                passengerPhone = json.getString("passengerPhone"),
-                                                                price = json.getString("price"),
-                                                                distance = json.getString("distance"),
-                                                                status = "ASSIGNED",
-                                                                inCity = json.optBoolean("inCity", true)
-                                                            )
-                                                        }.getOrNull() ?: return@subscribe
-                                                        driverViewModel.setCurrentOrder(newOrder)
-                                                        driverViewModel.setShouldTrack(!newOrder.inCity)
-                                                        playRepeatingNotificationSound(context)
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                    "ARRIVED" -> driverViewModel.setArrived(true)
-                                    "PICKED_UP" -> {
-                                        driverViewModel.setPickedUp(true)
-                                        if (shouldTrack && !isTracking) {
-                                            driverViewModel.setTracking(true)
-                                            TrackManager.startTracking(          // ← новый вызов БЕЗ scope
-                                                context = context,
-                                                onPointAdded = { point ->
-                                                    Log.d(TAG, "Точка добавлена: ${point.latitude}, ${point.longitude}")
-                                                },
-                                                onError = { error ->
-                                                    Toast.makeText(context, "Ошибка трека: $error", Toast.LENGTH_SHORT).show()
-                                                }
-                                            )
-                                        }
-                                    }
-                                    "IN_PROGRESS" -> Log.d(TAG, "В процессе")
-                                    else -> Log.d(TAG, "Статус: $status")
-                                }
-                            }
-                        )
-                    }
+
+                    // Запускаем сервис на конкретный orderId — обновления придут через SseEventBus
+                    TahoSseService.start(context, orderId = order.id, role = "DRIVER")
+
+                    Log.d(TAG, "Заказ принят → сервис запущен для orderId=${order.id}")
                 } catch (e: Exception) {
                     Log.e(TAG, "Ошибка принятия заказа", e)
                     Toast.makeText(context, "Не удалось принять заказ", Toast.LENGTH_SHORT).show()
@@ -541,6 +464,9 @@ fun DriverHomeScreen(navController: NavController) {
 
     LaunchedEffect(token) {
         loadDriverProfile()
+        if (driverStatus != "OFFLINE") {
+            TahoSseService.start(context, orderId = "driver", role = "DRIVER")
+        }
     }
 
     // Функция смены статуса
@@ -552,7 +478,7 @@ fun DriverHomeScreen(navController: NavController) {
 
         try {
             val response = apiService.toggleOnlineStatus(
-                token = "Bearer $token",
+                token     = "Bearer $token",
                 parkingId = parkId
             )
 
@@ -560,17 +486,21 @@ fun DriverHomeScreen(navController: NavController) {
                 val newStatus = response.body()?.string()?.trim()
                 if (newStatus != null) {
                     driverStatus = newStatus
-                    Log.d(TAG, "Статус изменён на: $newStatus (parkId=${parkId ?: "null"})")
-                }
-                if (newStatus == "OFFLINE") {
-                    queuePosition = 0
-                    parkName = null
+                    Log.d(TAG, "Статус изменён на: $newStatus")
+
+                    if (newStatus == "OFFLINE") {
+                        queuePosition = 0
+                        parkName = null
+                        TahoSseService.stop(context)  // ← останавливаем сервис
+                    } else {
+                        // Вышел на линию — запускаем сервис для получения новых заказов
+                        TahoSseService.start(context, orderId = "driver", role = "DRIVER")
+                    }
                 }
                 delay(500)
                 loadDriverProfile()
             } else {
-                val errorMsg = response.errorBody()?.string() ?: "Unknown error"
-                Log.e(TAG, "Неудачный ответ сервера: ${response.code()} - $errorMsg")
+                Log.e(TAG, "Ошибка сервера: ${response.code()}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Исключение при toggleStatus", e)
@@ -1177,8 +1107,6 @@ fun DriverHomeScreen(navController: NavController) {
         onDispose {
             newOrdersSseJob?.cancel()
             orderUpdatesSseJob?.cancel()
-            sseJob?.cancel()
-            sseJob = null
             Log.d(TAG, "Экран закрыт — SSE отключён")
             MapKitFactory.getInstance().onStop()
         }

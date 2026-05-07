@@ -18,6 +18,7 @@ import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.ApiService
 import svaga.taho.util.BuildConfig
 import svaga.taho.util.SseClient
+import svaga.taho.util.SseEventBus
 import svaga.taho.util.WaitingTimerManager
 import svaga.taho.utils.ActiveOrderManager
 import java.util.concurrent.TimeUnit
@@ -47,6 +48,7 @@ object AppModule {
         fun activeOrderManager(): ActiveOrderManager
         fun sseClient(): SseClient
         fun waitingTimerManager(): WaitingTimerManager
+        fun sseEventBus(): SseEventBus
     }
 
     @Provides
@@ -71,11 +73,17 @@ object AppModule {
             .build()
     }
 
+
+
     @Provides
     @Singleton
     fun provideSseClient(okHttpClient: OkHttpClient): SseClient {
         return SseClient(okHttpClient)
     }
+
+    @Provides
+    @Singleton
+    fun provideSseEventBus(): SseEventBus = SseEventBus()
 
     @Provides
     @Singleton
