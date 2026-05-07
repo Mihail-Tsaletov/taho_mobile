@@ -17,7 +17,6 @@ import java.math.BigDecimal
 fun DriverStatusBottomSheet(
     driverName: String,
     driverStatus: String,
-    driverBalance: BigDecimal,
     onToggleStatus: suspend (parkingId: Int?) -> Unit,  // ← parkingId: 1=Черема, 2=Город, null=уход с линии
     onDismiss: () -> Unit
 ) {
@@ -54,12 +53,6 @@ fun DriverStatusBottomSheet(
 
             Spacer(Modifier.height(16.dp))
 
-            Text(
-                text = "Баланс: $driverBalance ₽",
-                style = MaterialTheme.typography.bodyLarge
-            )
-
-            Spacer(Modifier.height(24.dp))
 
             if (!showParkingSelection) {
                 // ── Основная кнопка ──────────────────────────────────

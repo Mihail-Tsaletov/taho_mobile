@@ -103,7 +103,6 @@ fun DriverHomeScreen(navController: NavController) {
     var showStatusSheet by remember { mutableStateOf(false) }
     var newOrdersSseJob by remember { mutableStateOf<Job?>(null) }
     var orderUpdatesSseJob by remember { mutableStateOf<Job?>(null) }
-    var driverBalance by remember { mutableStateOf<BigDecimal>(BigDecimal.ZERO) }
 
     var showCreateOrderSheet by remember { mutableStateOf(false) }
     var createFromAddress by remember { mutableStateOf("") }
@@ -216,7 +215,6 @@ fun DriverHomeScreen(navController: NavController) {
             driverName = userName ?: "Имя не указано"
             driverStatus = profile.status
             tokenManager.saveDriverId(profile.driverId)
-            driverBalance = profile.balance  // ← берём баланс
             parkName = when (profile.parkId) {
                 1 -> "Черема"
                 2 -> "Город"
@@ -575,32 +573,24 @@ fun DriverHomeScreen(navController: NavController) {
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.adaptiveSp()
                         )
-                        if (driverBalance >= BigDecimal.ZERO) {
-                            Text(
-                                text = "${driverBalance.setScale(0, RoundingMode.HALF_UP)} ₽",
-                                color = Color.White.copy(alpha = 0.8f),
-                                fontSize = 14.adaptiveSp(),
-                                fontWeight = FontWeight.Medium
-                            )
 
-                            when {
-                                currentOrder != null -> {
-                                    Text(text = "🚗 В заказе", color = Color.White.copy(alpha = 0.8f), fontSize = 12.adaptiveSp())
-                                }
-                                queuePosition > 0 -> {
+                        when {
+                            currentOrder != null -> {
+                                Text(text = "🚗 В заказе", color = Color.White.copy(alpha = 0.8f), fontSize = 12.adaptiveSp())
+                            }
+                            queuePosition > 0 -> {
+                                Text(
+                                    text = "Очередь: $queuePosition",
+                                    color = Color.White.copy(alpha = 0.9f),
+                                    fontSize = 13.adaptiveSp(),
+                                    fontWeight = FontWeight.Medium
+                                )
+                                parkName?.let {
                                     Text(
-                                        text = "Очередь: $queuePosition",
-                                        color = Color.White.copy(alpha = 0.9f),
-                                        fontSize = 13.adaptiveSp(),
-                                        fontWeight = FontWeight.Medium
+                                        text = it,
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        fontSize = 12.adaptiveSp()
                                     )
-                                    parkName?.let {
-                                        Text(
-                                            text = it,
-                                            color = Color.White.copy(alpha = 0.7f),
-                                            fontSize = 12.adaptiveSp()
-                                        )
-                                    }
                                 }
                             }
                         }
@@ -1095,8 +1085,7 @@ fun DriverHomeScreen(navController: NavController) {
                         driverName = driverName,
                         driverStatus = driverStatus,
                         onToggleStatus = { parkingId -> toggleStatus(parkingId) },
-                        onDismiss = { showStatusSheet = false },
-                        driverBalance = driverBalance
+                        onDismiss = { showStatusSheet = false }
                     )
                 }
             }
