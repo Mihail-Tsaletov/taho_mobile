@@ -153,7 +153,8 @@ data class DriverProfileResponse(
     val phoneNumber: String,
     val status: String,
     val balance: BigDecimal,
-    val parkId: Int? = null
+    val parkId: Int? = null,
+    val numberInLine: Int
 )
 
 

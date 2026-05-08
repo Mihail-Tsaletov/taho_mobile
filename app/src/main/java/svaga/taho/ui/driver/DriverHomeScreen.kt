@@ -113,7 +113,7 @@ fun DriverHomeScreen(navController: NavController) {
     var createToSuggestions by remember { mutableStateOf<List<SuggestItem>>(emptyList()) }
     var createFocusedField by remember { mutableStateOf<String?>(null) }
     var isCreatingOrder by remember { mutableStateOf(false) }
-    var queuePosition by remember { mutableStateOf(0) }
+    var queuePosition by remember { mutableIntStateOf(0) }
     var parkName by remember { mutableStateOf<String?>(null) }
 
     var showTimeToArriveDialog by remember { mutableStateOf(false) }
@@ -220,6 +220,8 @@ fun DriverHomeScreen(navController: NavController) {
                 2 -> "Город"
                 else -> null
             }
+            queuePosition = profile.numberInLine
+            Log.d(TAG, "Номер в очереди $queuePosition")
             if (profile.status == "OFFLINE" || profile.parkId == null) {
                 parkName = null
             }
@@ -227,7 +229,7 @@ fun DriverHomeScreen(navController: NavController) {
         } catch (e: Exception) {
             Log.e(TAG, "Ошибка загрузки профиля", e)
             driverName = "Ошибка получения имени"
-            driverStatus = "СИСИ ПИСЬКИ ВРЫЗВ ПИПИСЬКИ"
+            driverStatus = "Неверный статус"
         }
     }
 
