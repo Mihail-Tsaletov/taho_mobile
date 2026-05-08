@@ -627,7 +627,7 @@ fun DriverHomeScreen(navController: NavController) {
                         elevation = CardDefaults.cardElevation(12.adaptiveDp())
                     ) {
                         Column(modifier = Modifier.padding(20.adaptiveDp())) {
-                            if (order.status == "ASSIGNED") { // ← НОВЫЙ ЗАКАЗ
+                            if (order.status == "ASSIGNED" ) { // ← НОВЫЙ ЗАКАЗ
                                 Text(
                                     "Новый заказ!",
                                     color = Color.White,
@@ -1027,20 +1027,33 @@ fun DriverHomeScreen(navController: NavController) {
                                                     startAddress = createFromAddress,
                                                     endAddress = createToAddress
                                                 )
+
                                             )
+                                            delay(1000)
 
                                             if (!response.isSuccessful) {
                                                 val error = response.errorBody()?.string()
                                                 throw Exception("Ошибка сервера: ${response.code()} $error")
                                             }
 
-                                            Log.d(TAG, "Order created: ${response.body()}")
+                                            val createdOrder = response.body()
+                                                ?: throw Exception("Пустой ответ сервера")
+
+                                            Log.d(TAG, "Order created: $createdOrder")
+
+
+                                            driverViewModel.setArrived(true)
+                                            driverViewModel.setPickedUp(true)
+                                            driverViewModel.setTracking(false)
+
                                             showCreateOrderSheet = false
                                             createFromAddress = ""
                                             createToAddress = ""
                                             createFromPoint = null
                                             createToPoint = null
+
                                             Toast.makeText(context, "Заказ создан", Toast.LENGTH_SHORT).show()
+
                                         } catch (e: Exception) {
                                             Log.e(TAG, "Ошибка создания заказа", e)
                                             Toast.makeText(context, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()

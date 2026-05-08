@@ -500,6 +500,15 @@ fun ClientHomeScreen(navController: NavController) {
                                         fromAddress = "Откуда"
                                         toAddress = "Куда едем?"
                                         isOrderPlaced = false
+                                        fromPlacemark?.let {
+                                            mapViewState.value?.mapWindow?.map?.mapObjects?.remove(it)
+                                            fromPlacemark = null
+                                        }
+
+                                        toPlacemark?.let {
+                                            mapViewState.value?.mapWindow?.map?.mapObjects?.remove(it)
+                                            toPlacemark = null
+                                        }
                                     },
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
