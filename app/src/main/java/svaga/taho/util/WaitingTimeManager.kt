@@ -13,7 +13,7 @@ import java.util.*
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val FREE_WAIT_MS = 1 * 1 * 1000L   // 2 минуты бесплатно
+private const val FREE_WAIT_MS = 1 * 60 * 1000L   // 2 минуты бесплатно
 private const val PAID_WAIT_MS = 15 * 60 * 1000L  // 15 минут платно
 
 sealed class WaitingState {

@@ -103,14 +103,6 @@ fun AppDrawerContent(
         )
         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-        // История заказов
-        ListItem(
-            headlineContent = { Text("История заказов") },
-            modifier = Modifier.clickable {
-                onCloseDrawer()
-            }
-        )
-
         // Связаться с оператором
         ListItem(
             headlineContent = { Text("Связаться с оператором") },

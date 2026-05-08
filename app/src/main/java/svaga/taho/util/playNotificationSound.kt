@@ -12,6 +12,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 import androidx.annotation.RequiresPermission
+import androidx.core.net.toUri
 
 private const val TAG = "NotificationSound"
 
@@ -28,8 +29,9 @@ fun playRepeatingNotificationSound(context: Context) {
 
     try {
         // === ЗВУК ===
-        val alarmUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
+
+        val alarmUri: Uri = Uri.parse("android.resource://${context.packageName}/raw/notification_sound")
 
         mediaPlayer = MediaPlayer().apply {
             setDataSource(context, alarmUri)

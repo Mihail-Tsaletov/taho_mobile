@@ -36,6 +36,10 @@ class DriverViewModel @Inject constructor(
     private val _shouldTrack = MutableStateFlow(false)
     val shouldTrack = _shouldTrack.asStateFlow()
 
+    private val _showRejected = MutableStateFlow(false)
+
+    val showRejected: StateFlow<Boolean> = _showRejected.asStateFlow()
+
     private val _savedPaidWaitingMinutes = MutableStateFlow<String?>(null)
     val savedPaidWaitingMinutes: StateFlow<String?> = _savedPaidWaitingMinutes.asStateFlow()
 
@@ -87,5 +91,13 @@ class DriverViewModel @Inject constructor(
             _isTracking.value = false
             _shouldTrack.value = false
         }
+    }
+
+    fun onOrderRejected() {
+        _showRejected.value = true
+    }
+
+    fun dismissRejected() {
+        _showRejected.value = false
     }
 }

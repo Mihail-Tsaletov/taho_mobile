@@ -49,6 +49,7 @@ import svaga.taho.service.TahoSseService
 import svaga.taho.ui.auth.AuthViewModel
 import svaga.taho.ui.components.CallOperatorButton
 import svaga.taho.ui.menu.AppDrawerContent
+import svaga.taho.util.WaitingState
 import svaga.taho.util.adaptiveDp
 import svaga.taho.util.adaptiveSp
 import kotlin.coroutines.resume
@@ -66,6 +67,12 @@ fun ClientHomeScreen(navController: NavController) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
+
+
+    val waitingTimerManager = remember {
+        EntryPointAccessors.fromApplication(context.applicationContext, AppModule.ApiProvider::class.java).waitingTimerManager()
+    }
+    val waitingState by waitingTimerManager.state.collectAsState()
 
     val clientViewModel: ClientViewModel = hiltViewModel()
     val currentStatus by clientViewModel.currentStatus.collectAsState()
@@ -201,10 +208,15 @@ fun ClientHomeScreen(navController: NavController) {
 
         when (order.status) {
             "ACCEPTED", "PICKED_UP" -> clientViewModel.setStatus("Заказ принят")
-            "ARRIVED"               -> clientViewModel.setStatus("Водитель на месте")
+            "ARRIVED"               -> {
+                clientViewModel.setStatus("Водитель на месте")
+                }
+
             "IN_PROGRESS"           -> {
                 clientViewModel.setStatus("В пути")
                 clientViewModel.onTripStarted()
+                waitingTimerManager.reset()
+
             }
             "ASSIGNED"              -> clientViewModel.setStatus("Водитель назначен")
             "COMPLETED"             -> {
@@ -243,6 +255,7 @@ fun ClientHomeScreen(navController: NavController) {
 
             when (status) {
                 "COMPLETED" -> {
+                    waitingTimerManager.reset()
                     delay(300) // небольшая задержка, чтобы дать прийти событию с ценой
 
                     val rawPriceFromEvent = json.optString("price").takeIf { it.isNotBlank() && it != "null" }
@@ -261,6 +274,7 @@ fun ClientHomeScreen(navController: NavController) {
                     TahoSseService.stop(context)
                 }
                 "CANCELLED" -> {
+                    waitingTimerManager.reset()
                     clientViewModel.onOrderCancelled()
                     activeOrderManager.clear()
                     clientViewModel.setTimeToArrive(null)
@@ -274,10 +288,12 @@ fun ClientHomeScreen(navController: NavController) {
                 else -> {
                     when (status) {
                         "ACCEPTED", "PICKED_UP" -> clientViewModel.setStatus("Заказ принят")
-                        "ARRIVED"               -> clientViewModel.setStatus("Водитель на месте")
+                        "ARRIVED"               -> {clientViewModel.setStatus("Водитель на месте")
+                            scope.launch { waitingTimerManager.onArrived(scope) } }
                         "IN_PROGRESS"           -> {
                             clientViewModel.setStatus("В пути")
                             clientViewModel.onTripStarted()
+                            waitingTimerManager.reset()
                         }
                         "ASSIGNED" -> clientViewModel.setStatus("Водитель назначен")
                         else       -> clientViewModel.setStatus("Статус: $status")
@@ -670,6 +686,53 @@ fun ClientHomeScreen(navController: NavController) {
 
                                 driverName?.let { name ->
                                     Text("Водитель: $name", fontWeight = FontWeight.Medium, fontSize = 18.adaptiveSp())
+                                }
+
+                                when (val ws = waitingState) {
+                                    is WaitingState.FreeWaiting -> {
+                                        val mins = ws.secondsLeft / 60
+                                        val secs = ws.secondsLeft % 60
+                                        Text(
+                                            text = "Бесплатное ожидание: %02d:%02d".format(mins, secs),
+                                            color = Color(0xFF4CAF50),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.adaptiveSp()
+                                        )
+                                    }
+                                    is WaitingState.PaidWaiting -> {
+                                        val mins = ws.secondsElapsed / 60
+                                        val secs = ws.secondsElapsed % 60
+                                        Column {
+                                            Text(
+                                                text = "Платное ожидание: %02d:%02d".format(mins, secs),
+                                                color = Color(0xFFFF9800),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 16.adaptiveSp()
+                                            )
+                                            Text(
+                                                text = "Максимум 15 минут",
+                                                color = Color.Gray,
+                                                fontSize = 12.adaptiveSp()
+                                            )
+                                        }
+                                    }
+                                    is WaitingState.Expired -> {
+                                        LaunchedEffect(Unit) {
+                                            try {
+                                                val endTime = waitingTimerManager.paidEndTime.value
+                                                // apiService.driverComplete("Bearer $token", order.id, trackJson, paidEndTime)
+                                                waitingTimerManager.reset()
+                                            } catch (e: Exception) {
+                                            }
+                                        }
+                                        Text(
+                                            text = "Ожидание истекло — заказ завершается",
+                                            color = Color.Red,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.adaptiveSp()
+                                        )
+                                    }
+                                    else -> {}
                                 }
 
                               /**  driverPhone?.let { phone ->

@@ -3,6 +3,7 @@ package svaga.taho.ui.driver
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import android.widget.Toast
@@ -93,6 +94,8 @@ fun DriverHomeScreen(navController: NavController) {
     val shouldTrack by driverViewModel.shouldTrack.collectAsState()
     val waitingState by waitingTimerManager.state.collectAsState()
     val savedPaidWaitingMinutes by driverViewModel.savedPaidWaitingMinutes.collectAsState()
+    val showRejected by driverViewModel.showRejected.collectAsState()
+
 
     // СОСТОЯНИЯ
     var routePolyline by remember { mutableStateOf<PolylineMapObject?>(null) }
@@ -271,6 +274,11 @@ fun DriverHomeScreen(navController: NavController) {
                             TrackManager.startTracking(context, onPointAdded = {}, onError = {})
                         }
                     }
+
+                    "REJECTED"              -> {
+                        driverViewModel.onOrderRejected()
+                        loadDriverProfile()
+                    }
                 }
                 return@collect
             }
@@ -395,6 +403,13 @@ fun DriverHomeScreen(navController: NavController) {
                     driverViewModel.setTracking(false)
                     Log.d(TAG, "ASSIGNED/ACCEPTED → сброс состояний")
                     stopNotificationSound()
+                }
+
+                "REJECTED"              -> {
+                    driverViewModel.onOrderRejected()
+                    activeOrderManager.clear()
+                    loadDriverProfile()
+                    return@LaunchedEffect
                 }
 
                 else -> {
@@ -628,6 +643,54 @@ fun DriverHomeScreen(navController: NavController) {
                         ),
                         elevation = CardDefaults.cardElevation(12.adaptiveDp())
                     ) {
+                        if (showRejected) {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3F3)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(20.adaptiveDp()),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        "Заказ отклонён менеджером",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 20.adaptiveSp(),
+                                        color = Color(0xFFE53935)
+                                    )
+                                    Spacer(Modifier.height(8.adaptiveDp()))
+                                    Text(
+                                        "Ваш заказ был отменён менеджером. Для уточнения деталей свяжитесь с оператором.",
+                                        fontSize = 14.adaptiveSp(),
+                                        color = Color.Gray
+                                    )
+                                    Spacer(Modifier.height(20.adaptiveDp()))
+                                    Button(
+                                        onClick = {
+                                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:+71234567890"))  //TODO Исправить везде номер телефона манагера
+                                            context.startActivity(intent)
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF757575))
+                                    ) {
+                                        Text("Связаться с оператором", color = Color.White)
+                                    }
+                                    Spacer(Modifier.height(8.adaptiveDp()))
+                                    Button(
+                                        onClick = {
+                                            driverViewModel.dismissRejected()
+                                            driverViewModel.resetOrderStates()
+                                            stopNotificationSound()
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
+                                    ) {
+                                        Text("Закрыть", color = Color.White, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                            return@Card
+                        }
                         Column(modifier = Modifier.padding(20.adaptiveDp())) {
                             if (order.status == "ASSIGNED" ) { // ← НОВЫЙ ЗАКАЗ
                                 Text(
@@ -905,6 +968,7 @@ fun DriverHomeScreen(navController: NavController) {
                                         }
                                     }
                                 }
+
                             }
                         }
                     }
@@ -1019,8 +1083,8 @@ fun DriverHomeScreen(navController: NavController) {
                                     scope.launch {
                                         isCreatingOrder = true
                                         try {
-                                            val startStr = createFromPoint?.let { "${it.longitude}, ${it.latitude}" } ?: ""
-                                            val endStr = createToPoint?.let { "${it.longitude}, ${it.latitude}" } ?: ""
+                                            val startStr = createFromPoint?.let { "${it.latitude}, ${it.longitude}" } ?: ""
+                                            val endStr = createToPoint?.let { "${it.latitude}, ${it.longitude}" } ?: ""
                                             val response = apiService.createOrderByDriver(
                                                 "Bearer $token",
                                                 CreateOrderRequest(
