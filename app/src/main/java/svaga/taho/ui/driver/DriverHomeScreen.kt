@@ -148,7 +148,16 @@ fun DriverHomeScreen(navController: NavController) {
     val userPhone by tokenManager.phoneFlow.collectAsState(initial = "Загрузка...")
 
     val (statusColor, statusText, statusClickable) = when (driverStatus) {
-        "AVAILABLE" -> Triple(Color(0xFF4CAF50), "На линии", true)
+        "AVAILABLE" -> {
+            val color = when (parkName) {           // или profile.parkId, если удобнее
+                "Черема" -> Color(0xFF2196F3)       // Синий для parkId = 1
+                "Город"  -> Color(0xFF4CAF50)       // Зелёный для parkId = 2
+                else     -> Color(0xFF4CAF50)       // по умолчанию зелёный
+            }
+            Triple(color, "На линии", true)
+        }
+
+
         "OFFLINE" -> Triple(Color(0xFF9E9E9E), "Отдых", true)
         "BUSY", "ASSIGNED", "IN_PROGRESS" -> Triple(Color(0xFFFF9800), "В заказе", false)
         else -> Triple(Color(0xFF9E9E9E), "Неизвестно", false)
