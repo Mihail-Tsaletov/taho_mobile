@@ -7,6 +7,8 @@ import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -18,6 +20,9 @@ private const val TAG = "NotificationSound"
 
 private var mediaPlayer: MediaPlayer? = null
 private var vibrator: Vibrator? = null
+
+private val handler = Handler(Looper.getMainLooper())
+private var stopRunnable: Runnable? = null
 
 /**
  * Запускает громкий повторяющийся звук + вибрацию
@@ -66,6 +71,14 @@ fun playRepeatingNotificationSound(context: Context) {
             @Suppress("DEPRECATION")
             vibrator?.vibrate(longArrayOf(0, 800, 400, 800, 400), 0)
         }
+
+
+        stopRunnable = Runnable {
+            Log.d(TAG, "Автоостановка звука через 30 секунд")
+            stopNotificationSound()
+        }
+
+        handler.postDelayed(stopRunnable!!, 30_000)
 
     } catch (e: Exception) {
         Log.e(TAG, "Ошибка запуска повторяющегося звука", e)

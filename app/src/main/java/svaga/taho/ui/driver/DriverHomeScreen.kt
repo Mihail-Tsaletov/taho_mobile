@@ -95,6 +95,8 @@ fun DriverHomeScreen(navController: NavController) {
     val waitingState by waitingTimerManager.state.collectAsState()
     val savedPaidWaitingMinutes by driverViewModel.savedPaidWaitingMinutes.collectAsState()
     val showRejected by driverViewModel.showRejected.collectAsState()
+    val shouldCloseAssignedCard by driverViewModel.shouldCloseAssignedCard.collectAsState()
+
 
 
     // СОСТОЯНИЯ
@@ -260,11 +262,22 @@ fun DriverHomeScreen(navController: NavController) {
             val status = json.optString("status", "UNKNOWN")
             Log.d(TAG, "=== SSE EVENT === status: $status | currentOrder.id=${currentOrder?.id} | currentOrder.status=${currentOrder?.status} | json=$json")
 
+            // CANCELLED обрабатываем первым — не зависит от статуса заказа
+            if (status == "CANCELLED") {
+                Log.d(TAG, "Получен CANCELLED → проверяем, нужно ли закрывать заказ")
+                if (currentOrder != null) {
+                    Log.d(TAG, "У нас был заказ (ID: ${currentOrder?.id}) → сбрасываем его")
+                    stopNotificationSound()
+                    driverViewModel.resetOrderStates()
+                    return@collect
+                }
+            }
+
             // Если есть активный заказ — обновление его статуса
             if (currentOrder?.status in listOf("ACCEPTED", "PICKED_UP", "ARRIVED", "IN_PROGRESS")) {
                 Log.d(TAG, "Обработка как обновление активного заказа")
                 when (status) {
-                    "CANCELLED", "COMPLETED" -> {
+                    "COMPLETED" -> {
                         Log.d(TAG, "Завершение заказа → полный сброс")
                         driverViewModel.resetOrderStates()
                         stopNotificationSound()
@@ -273,6 +286,16 @@ fun DriverHomeScreen(navController: NavController) {
                             delay(1000)
                             loadDriverProfile()
                             TahoSseService.start(context, orderId = "driver", role = "DRIVER")
+                        }
+                    }
+                    "CANCELLED" -> {
+                        Log.d(TAG, "Статус CANCELLED получен → закрываем карту принятия заказа")
+                        // Если заказ в статусе ASSIGNED — это значит его взял другой водитель
+                        if (currentOrder?.status == "ASSIGNED") {
+                            Log.d(TAG, "Заказ был ASSIGNED (ID: ${currentOrder?.id}) → закрываем его полностью")
+                            stopNotificationSound()
+                            driverViewModel.setCurrentOrder(null)  // ← Сразу сбрасываем заказ
+                            driverViewModel.resetOrderStates()
                         }
                     }
                     "ARRIVED" -> driverViewModel.setArrived(true)
@@ -642,6 +665,7 @@ fun DriverHomeScreen(navController: NavController) {
 
                 // ОДНО ОКНО — В ЗАВИСИМОСТИ ОТ СТАТУСА
                 currentOrder?.let { order ->
+
                     Card(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)

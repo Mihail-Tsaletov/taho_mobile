@@ -43,6 +43,21 @@ class DriverViewModel @Inject constructor(
     private val _savedPaidWaitingMinutes = MutableStateFlow<String?>(null)
     val savedPaidWaitingMinutes: StateFlow<String?> = _savedPaidWaitingMinutes.asStateFlow()
 
+    private val _shouldCloseAssignedCard = MutableStateFlow(false)
+    val shouldCloseAssignedCard: StateFlow<Boolean> = _shouldCloseAssignedCard.asStateFlow()
+
+    fun closeAssignedCard() {
+        viewModelScope.launch {
+            _shouldCloseAssignedCard.value = true
+        }
+    }
+
+    fun resetCloseAssignedCardFlag() {
+        viewModelScope.launch {
+            _shouldCloseAssignedCard.value = false
+        }
+    }
+
     fun savePaidWaitingMinutes(minutes: String?) {
         _savedPaidWaitingMinutes.value = minutes
     }
