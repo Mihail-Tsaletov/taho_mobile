@@ -78,6 +78,7 @@ private const val TAG = "DriverHomeScreen"
 fun DriverHomeScreen(navController: NavController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
     //Для работы Drawer
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val authViewModel: AuthViewModel = hiltViewModel()

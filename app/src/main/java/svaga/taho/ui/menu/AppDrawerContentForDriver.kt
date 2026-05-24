@@ -116,7 +116,7 @@ fun AppDrawerContentForDriver(
             headlineContent = { Text("Связаться с оператором") },
             modifier = Modifier.clickable {
                 onCloseDrawer()
-                val intent = Intent(Intent.ACTION_DIAL, "tel:+71234567890".toUri()) // Замените на реальный номер
+                val intent = Intent(Intent.ACTION_DIAL, "tel:+79495895834".toUri()) // Замените на реальный номер
                 context.startActivity(intent)
             }
         )

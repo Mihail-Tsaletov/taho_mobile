@@ -21,7 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-private const val OPERATOR_PHONE = "+999"
+private const val OPERATOR_PHONE = "+79495895834"
 
 @Composable
 fun CallOperatorButton(

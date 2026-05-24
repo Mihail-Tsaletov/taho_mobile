@@ -108,7 +108,7 @@ fun AppDrawerContent(
             headlineContent = { Text("Связаться с оператором") },
             modifier = Modifier.clickable {
                 onCloseDrawer()
-                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:+71234567890"))
+                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:+79495895834"))
                 context.startActivity(intent)
             }
         )

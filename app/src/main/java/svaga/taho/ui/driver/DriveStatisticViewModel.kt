@@ -1,4 +1,4 @@
-package svaga.taho.util.location
+package svaga.taho.ui.driver
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -10,7 +10,6 @@ import kotlinx.coroutines.launch
 import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.ApiService
 import svaga.taho.data.remote.OrderWeb
-import svaga.taho.ui.driver.DriverTrip
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject

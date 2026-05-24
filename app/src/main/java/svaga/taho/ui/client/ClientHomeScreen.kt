@@ -465,7 +465,7 @@ fun ClientHomeScreen(navController: NavController) {
                     }
                 )
 
-                CallOperatorButton(
+               CallOperatorButton(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(16.adaptiveDp())
@@ -476,7 +476,7 @@ fun ClientHomeScreen(navController: NavController) {
                         .fillMaxWidth()
                         .background(Color.White)
                         .padding(16.adaptiveDp())
-                ) {
+                )  {
 
 
                     completionState?.let { completion ->

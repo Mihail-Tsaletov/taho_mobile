@@ -34,8 +34,6 @@ fun playRepeatingNotificationSound(context: Context) {
 
     try {
         // === ЗВУК ===
-
-
         val alarmUri: Uri = Uri.parse("android.resource://${context.packageName}/raw/notification_sound")
 
         mediaPlayer = MediaPlayer().apply {
