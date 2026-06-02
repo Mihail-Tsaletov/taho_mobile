@@ -1,6 +1,7 @@
 package svaga.taho.data.remote
 
 import ActiveOrderResponse
+import android.R
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
@@ -60,7 +61,8 @@ interface ApiService {
     suspend fun driverComplete(@Header("Authorization") token: String,
                                @Path("id") orderId: String,
                                @Body trackJson: String,
-                               @Query("downtime") downtime: String? = null): Response<ResponseBody>
+                               @Query("downtime") downtime: String? = null,
+                               @Query("zaezd") zaezd: R.integer? = null): Response<ResponseBody>
 
     @POST("api/orders/{id}/pickedUp")
     suspend fun driverPickedUp(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
@@ -121,7 +123,9 @@ data class CreateOrderRequest(
     val startPoint: String,
     val endPoint: String,
     val startAddress: String,
-    val endAddress: String
+    val endAddress: String,
+    val pet: R.bool,
+    val load: R.bool
 )
 
 data class RegisterRequest(
