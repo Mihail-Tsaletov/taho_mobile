@@ -50,6 +50,9 @@ class DriverViewModel @Inject constructor(
 
     val zaezdCount: StateFlow<Int> = _zaezdCount.asStateFlow()
 
+    private val _completedPrice = MutableStateFlow<String?>(null)
+    val completedPrice: StateFlow<String?> = _completedPrice.asStateFlow()
+
 
     fun closeAssignedCard() {
         viewModelScope.launch {
@@ -132,5 +135,13 @@ class DriverViewModel @Inject constructor(
         viewModelScope.launch {
             _zaezdCount.value = 0
         }
+    }
+
+    fun showCompletedPrice(price: String) {
+        _completedPrice.value = price
+    }
+
+    fun dismissCompletedPrice() {
+        _completedPrice.value = null
     }
 }

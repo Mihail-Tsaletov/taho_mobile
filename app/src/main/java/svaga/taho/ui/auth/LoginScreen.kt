@@ -63,6 +63,10 @@ fun LoginScreen(
                     loading = false
                     navController.navigate("role_selection") { popUpTo(0) }
                 }
+                is AuthViewModel.AuthEvent.ToDriverHome -> {
+                    loading = false
+                    navController.navigate("driver_home") { popUpTo(0) }
+                }
                 is AuthViewModel.AuthEvent.ToRegister -> navController.navigate("register")
                 else -> loading = false
             }

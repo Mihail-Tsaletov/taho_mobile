@@ -32,7 +32,8 @@ class TokenManager @Inject constructor(
         private val NAME_KEY = stringPreferencesKey("name")
         private val PHONE_KEY = stringPreferencesKey("phone")
         private val ARRIVED_AT_KEY = longPreferencesKey("arrived_at_ms")// время прибытия (мс)
-        private val PAID_START_KEY = longPreferencesKey("paid_wait_start_ms")  // время начала платного ожидания (мс)
+        private val PAID_START_KEY = longPreferencesKey("paid_wait_start_ms") // время начала платного ожидания (мс)
+        private val LAST_ROLE_KEY = stringPreferencesKey("last_role") // ← новый, не чистится
     }
 
     val roleFlow: Flow<String?> = dataStore.data.map { it[ROLE_KEY] }
@@ -41,6 +42,8 @@ class TokenManager @Inject constructor(
     val phoneFlow: Flow<String?> = dataStore.data.map { it[PHONE_KEY] }
     val arrivedAtFlow: Flow<Long> = dataStore.data.map { it[ARRIVED_AT_KEY] ?: 0L }
     val paidWaitStartFlow: Flow<Long> = dataStore.data.map { it[PAID_START_KEY] ?: 0L }
+    val lastRoleFlow: Flow<String?> = dataStore.data.map { it[LAST_ROLE_KEY] }
+
     val tokenFlow: Flow<String> = dataStore.data
         .map { it[TOKEN_KEY] ?: "" }
     val currentTokenValue: String
@@ -65,6 +68,10 @@ class TokenManager @Inject constructor(
         }
     }
 
+    suspend fun saveLastRole(role: String) {
+        dataStore.edit { it[LAST_ROLE_KEY] = role }
+    }
+
 
     suspend fun saveToken(token: String) {
         dataStore.edit { it[TOKEN_KEY] = token }
@@ -74,8 +81,8 @@ class TokenManager @Inject constructor(
         dataStore.edit { it[LAST_MODE_DRIVER] = isDriver }
     }
 
-    suspend fun clear() = dataStore.edit { it.clear() }
-
+    suspend fun clear() = dataStore.edit { it.clear()
+    }
     suspend fun saveArrivedAt(timeMs: Long) {
         dataStore.edit { it[ARRIVED_AT_KEY] = timeMs }
     }

@@ -26,10 +26,14 @@ fun AppNavGraph(navController: NavHostController) {
 
     val token by tokenManager.tokenFlow.collectAsState(initial = null)
     val role by tokenManager.roleFlow.collectAsState(initial = null)
+    val lastRole by tokenManager.lastRoleFlow.collectAsState(initial = null)
 
     val startDestination = when {
-        token == null -> Screen.Login.route
-        role == "DRIVER" -> Screen.RoleSelection.route
+        token.isNullOrEmpty() -> when (lastRole) {
+            "DRIVER" -> Screen.DriverHome.route  // после logout водитель → DriverHome (но без токена экран сам редиректнет на логин)
+            else -> Screen.Login.route
+        }
+        role == "DRIVER" -> Screen.DriverHome.route
         role == "CLIENT" -> Screen.ClientHome.route
         else -> Screen.Login.route
     }

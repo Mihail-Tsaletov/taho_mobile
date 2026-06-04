@@ -35,7 +35,9 @@ import java.util.*
 import android.util.Log
 import com.yandex.mapkit.map.PlacemarkMapObject
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
@@ -121,6 +123,11 @@ fun ClientHomeScreen(navController: NavController) {
     //Цена заказа предварительно
     var calculatedPrice by remember { mutableStateOf<Double?>(null) }
 
+    var hasPet by remember { mutableStateOf(false) }
+    var hasLoad by remember { mutableStateOf(false) }
+    var showExtraOptions by remember { mutableStateOf(false) }
+
+
     val sseEventBus = remember {
         EntryPointAccessors.fromApplication(
             context.applicationContext,
@@ -157,6 +164,9 @@ fun ClientHomeScreen(navController: NavController) {
         toPoint = null
         calculatedPrice = null
         isOrderPlaced = false
+        hasPet = false
+        hasLoad = false
+        showExtraOptions = false
         activeOrderManager.clear()
     }
 
@@ -489,7 +499,7 @@ fun ClientHomeScreen(navController: NavController) {
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .background(Color.White)
-                        .padding(16.adaptiveDp())
+                        .padding(6.adaptiveDp())
                 )  {
 
 
@@ -508,7 +518,7 @@ fun ClientHomeScreen(navController: NavController) {
                                     fontSize = 20.adaptiveSp(),
                                     color = Color(0xFF4CAF50)
                                 )
-                                Spacer(Modifier.height(16.adaptiveDp()))
+                                Spacer(Modifier.height(12.adaptiveDp()))
                                 Text(
                                     "Итого: ${completion.price} ₽",
                                     fontWeight = FontWeight.Bold,
@@ -523,7 +533,7 @@ fun ClientHomeScreen(navController: NavController) {
                                         color = Color.Gray
                                     )
                                 }
-                                Spacer(Modifier.height(20.adaptiveDp()))
+                                Spacer(Modifier.height(15.adaptiveDp()))
                                 Button(
                                     onClick = {
                                         clientViewModel.dismissCompletion()
@@ -761,7 +771,7 @@ fun ClientHomeScreen(navController: NavController) {
                                     )
                                 } */
 
-                                Spacer(Modifier.height(16.adaptiveDp()))
+                                Spacer(Modifier.height(4.adaptiveDp()))
 
                                 Text("Откуда: $fromAddress")
                                 Text("Куда: $toAddress")
@@ -804,7 +814,7 @@ fun ClientHomeScreen(navController: NavController) {
                             }
                         }*/
 
-                        Spacer(Modifier.height(12.adaptiveDp()))
+                        Spacer(Modifier.height(4.adaptiveDp()))
 
                         // Поле Откуда
                         Column {
@@ -846,7 +856,7 @@ fun ClientHomeScreen(navController: NavController) {
                             }
                         }
 
-                        Spacer(Modifier.height(12.adaptiveDp()))
+                        Spacer(Modifier.height(4.adaptiveDp()))
 
                         // Поле Куда — ВОТ ЭТОТ БЛОК БЫЛ ПРОПУЩЕН
                         Column {
@@ -888,11 +898,17 @@ fun ClientHomeScreen(navController: NavController) {
                             }
                         }
 
-                        Spacer(Modifier.height(20.adaptiveDp()))
+                        Spacer(Modifier.height(6.adaptiveDp()))
 
                         // ← Блок с предварительной ценой
                         if (calculatedPrice != null) {
                             val isOutside = calculatedPrice == 404.0   // именно то значение, которое возвращает бэкенд при Outside
+                                //рассчет цены с доп опциями
+                            val optionsPrice = (if (hasPet) 50 else 0) + (if (hasLoad) 50 else 0)
+                            calculatedPrice?.let { price ->
+                                val total = price + optionsPrice
+
+                            }
 
                             Card(
                                 colors = CardDefaults.cardColors(
@@ -906,7 +922,7 @@ fun ClientHomeScreen(navController: NavController) {
                                 ) {
                                     Text(
                                         if (isOutside) "Цена по таксометру" else "Предварительная цена:",
-                                        fontSize = 16.adaptiveSp(),
+                                        fontSize = 14.adaptiveSp(),
                                         fontWeight = FontWeight.Medium,
                                         color = if (isOutside) Color(0xFFEF6C00) else Color.Unspecified
                                     )
@@ -914,17 +930,55 @@ fun ClientHomeScreen(navController: NavController) {
 
                                     if (!isOutside) {
                                         Text(
-                                            "${calculatedPrice!!.toInt()} ₽",
+                                            text = if (optionsPrice > 0){
+                                                "${calculatedPrice!!.toInt()} ₽(+ $optionsPrice)₽"}
+                                            else {
+                                                "${calculatedPrice!!.toInt()} ₽"
+                                            },
+
                                             fontSize = 22.adaptiveSp(),
                                             fontWeight = FontWeight.Bold,
                                             color = Color(0xFF2E7D32)
+
                                         )
+
                                     }
                                 }
                             }
-                            Spacer(Modifier.height(12.adaptiveDp()))
+                            Spacer(Modifier.height(6.adaptiveDp()))
+                        }
+                        OutlinedButton(
+                            onClick = { showExtraOptions = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (hasPet || hasLoad) Color(0xFF1E88E5) else Color.Gray
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                if (hasPet || hasLoad) Color(0xFF1E88E5) else Color.LightGray
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = if (hasPet || hasLoad) {
+                                    buildString {
+                                        if (hasPet) append("Животное")
+                                        if (hasPet && hasLoad) append(" · ")
+                                        if (hasLoad) append("Груз")
+                                    }
+                                } else {
+                                    "Дополнительные опции"
+                                },
+                                fontSize = 14.sp
+                            )
                         }
 
+                        Spacer(Modifier.height(4.adaptiveDp()))
                         // Кнопка Заказать
                         Button(
                             onClick = {
@@ -939,8 +993,8 @@ fun ClientHomeScreen(navController: NavController) {
                                         endPoint     = endStr,
                                         startAddress = fromAddress,
                                         endAddress   = toAddress,
-                                        load = null,
-                                        pet = null,  //TODO Тут если что не должнеы быть налл
+                                        pet = if (hasPet) true else null,
+                                        load = if (hasLoad) true else null
                                     )
 
                                     try {
@@ -982,6 +1036,95 @@ fun ClientHomeScreen(navController: NavController) {
                     }
                 }
 
+            }
+            if (showExtraOptions) {
+                ModalBottomSheet(
+                    onDismissRequest = { showExtraOptions = false }
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                            .padding(bottom = 32.dp)
+                            .navigationBarsPadding()
+                    ) {
+                        Text(
+                            text = "Дополнительные опции",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp
+                        )
+
+                        Spacer(Modifier.height(20.dp))
+
+                        HorizontalDivider()
+
+                        Spacer(Modifier.height(12.dp))
+
+                        // Животное
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { hasPet = !hasPet }
+                                .padding(vertical = 8.dp)
+                        ) {
+                            Checkbox(
+                                checked = hasPet,
+                                onCheckedChange = {
+                                    hasPet = it
+                                }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text("Животное", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                                Text(
+                                    "Перевозка домашних питомцев",
+                                    fontSize = 13.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
+
+                        HorizontalDivider()
+
+                        Spacer(Modifier.height(4.dp))
+
+                        // Груз
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { hasLoad = !hasLoad }
+                                .padding(vertical = 8.dp)
+                        ) {
+                            Checkbox(
+                                checked = hasLoad,
+                                onCheckedChange = { hasLoad = it }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text("Груз", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                                Text(
+                                    "Наличие крупногабаритного груза",
+                                    fontSize = 13.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
+
+                        HorizontalDivider()
+
+                        Spacer(Modifier.height(20.dp))
+
+                        Button(
+                            onClick = { showExtraOptions = false },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
+                        ) {
+                            Text("Готово", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
         }
     }

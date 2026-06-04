@@ -97,6 +97,8 @@ fun DriverHomeScreen(navController: NavController) {
     val savedPaidWaitingMinutes by driverViewModel.savedPaidWaitingMinutes.collectAsState()
     val showRejected by driverViewModel.showRejected.collectAsState()
     val shouldCloseAssignedCard by driverViewModel.shouldCloseAssignedCard.collectAsState()
+    val completedPrice by driverViewModel.completedPrice.collectAsState()
+
 
 
 
@@ -128,6 +130,8 @@ fun DriverHomeScreen(navController: NavController) {
     val zaezdCount by driverViewModel.zaezdCount.collectAsState()
     var showZaezdConfirmDialog by remember { mutableStateOf(false) }
     var showCompleteConfirmDialog by remember { mutableStateOf(false) }
+
+
 
     val createSuggestSession = remember {
         SearchFactory.getInstance()
@@ -283,14 +287,20 @@ fun DriverHomeScreen(navController: NavController) {
                 when (status) {
                     "COMPLETED" -> {
                         Log.d(TAG, "Завершение заказа → полный сброс")
+                        val price = json.optString("price").takeIf { it.isNotBlank() && it != "null" }
+                        if (price != null) {
+                            driverViewModel.showCompletedPrice(price)
+                        }
                         driverViewModel.resetOrderStates()
                         stopNotificationSound()
+
 
                         scope.launch {
                             delay(1000)
                             loadDriverProfile()
                             TahoSseService.start(context, orderId = "driver", role = "DRIVER")
                         }
+
                     }
                     "CANCELLED" -> {
                         Log.d(TAG, "Статус CANCELLED получен → закрываем карту принятия заказа")
@@ -1192,6 +1202,45 @@ fun DriverHomeScreen(navController: NavController) {
                         driverStatus = driverStatus,
                         onToggleStatus = { parkingId -> toggleStatus(parkingId) },
                         onDismiss = { showStatusSheet = false }
+                    )
+                }
+                // Диалог итоговой стоимости поездки
+                completedPrice?.let { price ->
+                    AlertDialog(
+                        onDismissRequest = { driverViewModel.dismissCompletedPrice() },
+                        title = {
+                            Text(
+                                text = "Поездка завершена",
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "Стоимость поездки:",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = Color.Gray
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = "$price ₽",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF4CAF50)
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = { driverViewModel.dismissCompletedPrice() },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
+                            ) {
+                                Text("Закрыть", color = Color.White)
+                            }
+                        }
                     )
                 }
                 if (showZaezdConfirmDialog) {

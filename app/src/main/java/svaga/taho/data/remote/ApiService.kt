@@ -124,8 +124,8 @@ data class CreateOrderRequest(
     val endPoint: String,
     val startAddress: String,
     val endAddress: String,
-    val pet: R.bool?,
-    val load: R.bool?
+    val pet: Boolean? = null,
+    val load: Boolean? = null
 )
 
 data class RegisterRequest(

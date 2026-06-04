@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.ApiService
@@ -42,6 +43,7 @@ class AuthViewModel @Inject constructor(
 
     private val _verificationCode = MutableStateFlow("")           // ← важно!
     val verificationCode: StateFlow<String> = _verificationCode.asStateFlow()
+
 
     sealed class AuthEvent {
         object ToRegister : AuthEvent()
@@ -171,12 +173,14 @@ class AuthViewModel @Inject constructor(
 
                 tokenManager.saveAuth(response.token, roleFromToken, profile.name,
                     phone = profile.phone)
+                tokenManager.saveLastRole(roleFromToken) // ← добавить эту строку
+
                 ///// ************************
                 _currentToken.value = response.token
                 Log.d(TAG, "PROFILE NAME EBYCHI SLUCHAS: $profile.name")
                 when (roleFromToken) {
                     "CLIENT" -> _event.emit(AuthEvent.ToClientHome)
-                    "DRIVER" -> _event.emit(AuthEvent.ToRoleSelection)
+                    "DRIVER" -> _event.emit(AuthEvent.ToDriverHome)
                     else -> _event.emit(AuthEvent.Error("Неизвестная роль: $roleFromToken"))
                 }
             } catch (e: retrofit2.HttpException) {
