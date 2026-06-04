@@ -1289,7 +1289,7 @@ fun DriverHomeScreen(navController: NavController) {
                                     showCompleteConfirmDialog = false
                                     scope.launch {
                                         val waitingMinutes = savedPaidWaitingMinutes
-                                        val zaezdValue = if (zaezdCount > 0) zaezdCount else null
+                                        val zaezdValue = if (zaezdCount > 0) zaezdCount else 0
                                         try {
                                             val trackJson = if (shouldTrack) {
                                                 val finalJson = TrackManager.stopTrackingAndGetJson()

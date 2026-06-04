@@ -62,7 +62,7 @@ interface ApiService {
                                @Path("id") orderId: String,
                                @Body trackJson: String,
                                @Query("downtime") downtime: String? = null,
-                               @Query("zaezd") zaezd: Int? = null): Response<ResponseBody>
+                               @Query("zaezd") zaezd: Int = 0): Response<ResponseBody>
 
     @POST("api/orders/{id}/pickedUp")
     suspend fun driverPickedUp(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
