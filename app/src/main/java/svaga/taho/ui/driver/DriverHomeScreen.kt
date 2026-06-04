@@ -125,6 +125,9 @@ fun DriverHomeScreen(navController: NavController) {
     var showTimeToArriveDialog by remember { mutableStateOf(false) }
     var pendingOrder by remember { mutableStateOf<DriverOrder?>(null) }
 
+    val zaezdCount by driverViewModel.zaezdCount.collectAsState()
+    var showZaezdConfirmDialog by remember { mutableStateOf(false) }
+    var showCompleteConfirmDialog by remember { mutableStateOf(false) }
 
     val createSuggestSession = remember {
         SearchFactory.getInstance()
@@ -787,7 +790,7 @@ fun DriverHomeScreen(navController: NavController) {
                                     fontSize = 22.adaptiveSp(),
                                     fontWeight = FontWeight.Bold
                                 )
-                                Spacer(Modifier.height(12.adaptiveDp()))
+                                Spacer(Modifier.height(5.adaptiveDp()))
                                 Text("Пассажир: ${order.passengerName}")
                                 /** Text("Телефон: ${order.passengerPhone}",
                                     color = Color.Blue,
@@ -803,7 +806,7 @@ fun DriverHomeScreen(navController: NavController) {
                                 Text("Откуда: ${order.startAddress}")
                                 Text("Куда: ${order.endAddress}")
 
-                                Spacer(Modifier.height(8.adaptiveDp()))
+                                Spacer(Modifier.height(4.adaptiveDp()))
 
                                 Button(
                                     onClick = {
@@ -824,7 +827,7 @@ fun DriverHomeScreen(navController: NavController) {
                                         tint = Color.White,
                                         modifier = Modifier.size(18.adaptiveDp())
                                     )
-                                    Spacer(Modifier.width(8.adaptiveDp()))
+                                    Spacer(Modifier.width(4.adaptiveDp()))
                                     Text(
                                         text = if (!isPickedUp) "Навигация к пассажиру" else "Навигация к цели",
                                         color = Color.White,
@@ -832,58 +835,32 @@ fun DriverHomeScreen(navController: NavController) {
                                     )
                                 }
 
-                                Spacer(Modifier.height(16.adaptiveDp()))
+                                Spacer(Modifier.height(4.adaptiveDp()))
                                 when {
                                     isPickedUp -> {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                text = "Заездов: $zaezdCount",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 16.adaptiveSp(),
+                                                color = Color(0xFF1E88E5)
+                                            )
+                                            Button(
+                                                onClick = { showZaezdConfirmDialog = true },
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
+                                            ) {
+                                                Text("+1 заезд", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.adaptiveSp())
+                                            }
+                                        }
+
+                                        Spacer(Modifier.height(4.adaptiveDp()))
+
                                         Button(
-                                            onClick = {
-                                                scope.launch {
-                                                    val waitingMinutes = savedPaidWaitingMinutes
-                                                    Log.d(TAG, "=== ЗАВЕРШЕНИЕ ЗАКАЗА ===")
-                                                    Log.d(TAG, "shouldTrack = $shouldTrack | isTracking = $isTracking | savedPaidWaitingMinutes = $waitingMinutes")
-
-                                                    try {
-                                                        val trackJson = if (shouldTrack) {
-                                                            // ← Сюда должны попадать, если трек нужен
-                                                            val currentJson = TrackManager.getCurrentTrackJson()
-                                                            val pointCount = TrackManager.getCurrentTrackJson().count { it == '{' } // грубо считаем точки
-                                                            Log.d(TAG, "Перед остановкой — точек: $pointCount | JSON: $currentJson")
-
-                                                            val finalJson = TrackManager.stopTrackingAndGetJson()
-                                                            Log.d(TAG, "TrackManager.stopTrackingAndGetJson() вернул: $finalJson")
-                                                            finalJson
-                                                        } else {
-                                                            Log.d(TAG, "shouldTrack = false → отправляем пустой трек []")
-                                                            TrackManager.stopTrackingAndGetJson() // всё равно останавливаем на всякий случай
-                                                            "[]"
-                                                        }
-
-                                                        val response = apiService.driverComplete(
-                                                            "Bearer $token",
-                                                            order.id,
-                                                            trackJson,
-                                                            downtime = waitingMinutes
-                                                        )
-
-                                                        if (response.isSuccessful) {
-                                                            Toast.makeText(context, "Поездка завершена, трек отправлен", Toast.LENGTH_SHORT).show()
-                                                            Log.d(TAG, "Поездка завершена → отправлен трек длиной ${trackJson.length} символов")
-                                                            Log.d(TAG, "Платное ожидание отправлено: $waitingMinutes")
-
-                                                            // Финальная очистка
-                                                            TrackManager.clearTrack()
-                                                            driverViewModel.setTracking(false)
-                                                            driverViewModel.resetOrderStates()
-                                                            loadDriverProfile()
-                                                        } else {
-                                                            Log.e(TAG, "Ошибка driverComplete: код ${response.code()}")
-                                                        }
-                                                    } catch (e: Exception) {
-                                                        Log.e(TAG, "Критическая ошибка при завершении заказа", e)
-                                                        Toast.makeText(context, "Ошибка завершения: ${e.message}", Toast.LENGTH_LONG).show()
-                                                    }
-                                                }
-                                            },
+                                            onClick = { showCompleteConfirmDialog = true },
                                             modifier = Modifier.fillMaxWidth(),
                                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE91E63))
                                         ) {
@@ -940,7 +917,7 @@ fun DriverHomeScreen(navController: NavController) {
                                             else -> {}
                                         }
 
-                                        Spacer(Modifier.height(12.adaptiveDp()))
+                                        Spacer(Modifier.height(5.adaptiveDp()))
                                         Button(
                                             onClick = {
                                                 scope.launch {
@@ -1110,7 +1087,7 @@ fun DriverHomeScreen(navController: NavController) {
                                 }
                             }
 
-                            Spacer(Modifier.height(20.adaptiveDp()))
+                            Spacer(Modifier.height(8.adaptiveDp()))
 
                             Button(
                                 onClick = {
@@ -1125,7 +1102,9 @@ fun DriverHomeScreen(navController: NavController) {
                                                     startPoint = startStr,
                                                     endPoint = endStr,
                                                     startAddress = createFromAddress,
-                                                    endAddress = createToAddress
+                                                    endAddress = createToAddress,
+                                                    pet = null,
+                                                    load = null //todo не должно быть налла
                                                 )
 
                                             )
@@ -1182,7 +1161,7 @@ fun DriverHomeScreen(navController: NavController) {
                         onDismissRequest = { showTimeToArriveDialog = false },
                         title = { Text("Время до прибытия", fontWeight = FontWeight.Bold) },
                         text = {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.adaptiveDp())) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.adaptiveDp())) {
                                 listOf("5 минут", "10 минут", "15+ минут").forEach { time ->
                                     Button(
                                         onClick = {
@@ -1213,6 +1192,102 @@ fun DriverHomeScreen(navController: NavController) {
                         driverStatus = driverStatus,
                         onToggleStatus = { parkingId -> toggleStatus(parkingId) },
                         onDismiss = { showStatusSheet = false }
+                    )
+                }
+                if (showZaezdConfirmDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showZaezdConfirmDialog = false },
+                        title = { Text("Подтверждение", fontWeight = FontWeight.Bold) },
+                        text = { Text("Добавить +1 заезд? Текущее количество: $zaezdCount") },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    driverViewModel.incrementZaezd()
+                                    showZaezdConfirmDialog = false
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
+                            ) {
+                                Text("Да, добавить", color = Color.White)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showZaezdConfirmDialog = false }) {
+                                Text("Отмена", color = Color.Gray)
+                            }
+                        }
+                    )
+                }
+                if (showCompleteConfirmDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showCompleteConfirmDialog = false },
+                        title = { Text("Завершить заказ?", fontWeight = FontWeight.Bold) },
+                        text = {
+                            Column {
+                                Text("Вы уверены, что хотите завершить поездку?")
+                                if (zaezdCount > 0) {
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = "Заездов: $zaezdCount",
+                                        color = Color(0xFF1E88E5),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    showCompleteConfirmDialog = false
+                                    scope.launch {
+                                        val waitingMinutes = savedPaidWaitingMinutes
+                                        val zaezdValue = if (zaezdCount > 0) zaezdCount else null
+                                        try {
+                                            val trackJson = if (shouldTrack) {
+                                                val finalJson = TrackManager.stopTrackingAndGetJson()
+                                                finalJson
+                                            } else {
+                                                TrackManager.stopTrackingAndGetJson()
+                                                "[]"
+                                            }
+
+                                            val response = apiService.driverComplete(
+                                                "Bearer $token",
+                                                currentOrder?.id ?: return@launch,
+                                                trackJson,
+                                                downtime = waitingMinutes,
+                                                zaezd = zaezdValue
+                                            )
+
+                                            if (response.isSuccessful) {
+                                                Toast.makeText(context, "Поездка завершена", Toast.LENGTH_SHORT).show()
+                                                TrackManager.clearTrack()
+                                                driverViewModel.setTracking(false)
+                                                driverViewModel.resetOrderStates() // сбросит и zaezdCount
+                                                loadDriverProfile()
+                                                createFromAddress = ""
+                                                createToAddress = ""
+                                                createFromPoint = null
+                                                createToPoint = null
+                                                createFocusedField = null
+                                            } else {
+                                                Log.e(TAG, "Ошибка driverComplete: код ${response.code()}")
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "Критическая ошибка при завершении заказа", e)
+                                            Toast.makeText(context, "Ошибка завершения: ${e.message}", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE91E63))
+                            ) {
+                                Text("Завершить", color = Color.White)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showCompleteConfirmDialog = false }) {
+                                Text("Отмена", color = Color.Gray)
+                            }
+                        }
                     )
                 }
             }

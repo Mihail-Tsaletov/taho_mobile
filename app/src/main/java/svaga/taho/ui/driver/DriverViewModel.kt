@@ -46,6 +46,11 @@ class DriverViewModel @Inject constructor(
     private val _shouldCloseAssignedCard = MutableStateFlow(false)
     val shouldCloseAssignedCard: StateFlow<Boolean> = _shouldCloseAssignedCard.asStateFlow()
 
+    private val _zaezdCount = MutableStateFlow(0)
+
+    val zaezdCount: StateFlow<Int> = _zaezdCount.asStateFlow()
+
+
     fun closeAssignedCard() {
         viewModelScope.launch {
             _shouldCloseAssignedCard.value = true
@@ -105,6 +110,7 @@ class DriverViewModel @Inject constructor(
             _isPickedUp.value = false
             _isTracking.value = false
             _shouldTrack.value = false
+            _zaezdCount.value = 0
         }
     }
 
@@ -114,5 +120,17 @@ class DriverViewModel @Inject constructor(
 
     fun dismissRejected() {
         _showRejected.value = false
+    }
+
+    fun incrementZaezd() {
+        viewModelScope.launch {
+            _zaezdCount.value++
+        }
+    }
+
+    fun resetZaezd() {
+        viewModelScope.launch {
+            _zaezdCount.value = 0
+        }
     }
 }

@@ -148,6 +148,18 @@ fun ClientHomeScreen(navController: NavController) {
     }
     val activeOrder by activeOrderManager.activeOrder.collectAsState()
 
+    fun resetOrderState() {
+        fromAddress = "Откуда"
+        toAddress = "Куда едем?"
+        fromInput = ""
+        toInput = ""
+        fromPoint = null
+        toPoint = null
+        calculatedPrice = null
+        isOrderPlaced = false
+        activeOrderManager.clear()
+    }
+
     // Загрузка активного заказа при запуске экрана
     LaunchedEffect(Unit) {
         activeOrderManager.loadActiveOrderForClient()
@@ -223,6 +235,7 @@ fun ClientHomeScreen(navController: NavController) {
                 clientViewModel.onTripCompleted(order.price ?: "По тарифу")
                 TahoSseService.stop(context)
                 activeOrderManager.clear()
+                resetOrderState()
                 return@LaunchedEffect
             }
             "CANCELLED"             -> {
@@ -272,6 +285,7 @@ fun ClientHomeScreen(navController: NavController) {
                     clientViewModel.onTripCompleted(finalPrice)
                     activeOrderManager.clear()
                     TahoSseService.stop(context)
+                    resetOrderState()
                 }
                 "CANCELLED" -> {
                     waitingTimerManager.reset()
@@ -924,7 +938,9 @@ fun ClientHomeScreen(navController: NavController) {
                                         startPoint   = startStr,
                                         endPoint     = endStr,
                                         startAddress = fromAddress,
-                                        endAddress   = toAddress
+                                        endAddress   = toAddress,
+                                        load = null,
+                                        pet = null,  //TODO Тут если что не должнеы быть налл
                                     )
 
                                     try {

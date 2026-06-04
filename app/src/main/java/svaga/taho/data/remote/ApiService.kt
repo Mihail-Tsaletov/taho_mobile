@@ -62,7 +62,7 @@ interface ApiService {
                                @Path("id") orderId: String,
                                @Body trackJson: String,
                                @Query("downtime") downtime: String? = null,
-                               @Query("zaezd") zaezd: R.integer? = null): Response<ResponseBody>
+                               @Query("zaezd") zaezd: Int? = null): Response<ResponseBody>
 
     @POST("api/orders/{id}/pickedUp")
     suspend fun driverPickedUp(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
@@ -124,8 +124,8 @@ data class CreateOrderRequest(
     val endPoint: String,
     val startAddress: String,
     val endAddress: String,
-    val pet: R.bool,
-    val load: R.bool
+    val pet: R.bool?,
+    val load: R.bool?
 )
 
 data class RegisterRequest(
