@@ -378,11 +378,11 @@ fun DriverHomeScreen(navController: NavController) {
         activeOrderManager.loadActiveOrderForDriver()
     }
 
-    LaunchedEffect(isArrived) {
-        if (isArrived && !isPickedUp) {
-            waitingTimerManager.onArrived(scope)
-        }
-    }
+  //  LaunchedEffect(isArrived) {
+      //  if (isArrived && !isPickedUp) {
+          //  waitingTimerManager.onArrived(scope)
+      //  }
+   // }
 
     LaunchedEffect(isPickedUp) {
         if (isPickedUp) {
@@ -879,15 +879,32 @@ fun DriverHomeScreen(navController: NavController) {
                                     }
                                     isArrived -> {
                                         when (val ws = waitingState) {
+                                            is WaitingState.Idle -> {
+                                                // Ещё не начато — показываем кнопку ручного запуска платного ожидания
+                                                Button(
+                                                    onClick = {
+                                                        waitingTimerManager.startPaidWaiting(scope)
+                                                    },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
+                                                ) {
+                                                    Text(
+                                                        "Начать платное ожидание",
+                                                        color = Color.White,
+                                                        fontSize = 16.adaptiveSp()
+                                                    )
+                                                }
+                                            }
                                             is WaitingState.FreeWaiting -> {
-                                                val mins = ws.secondsLeft / 60
-                                                val secs = ws.secondsLeft % 60
-                                                Text(
-                                                    text = "Бесплатное ожидание: %02d:%02d".format(mins, secs),
-                                                    color = Color(0xFF4CAF50),
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 16.adaptiveSp()
-                                                )
+                                                // --- ЗАКОММЕНТИРОВАНО: автоматический бесплатный период ---
+                                                // val mins = ws.secondsLeft / 60
+                                                // val secs = ws.secondsLeft % 60
+                                                // Text(
+                                                //     text = "Бесплатное ожидание: %02d:%02d".format(mins, secs),
+                                                //     color = Color(0xFF4CAF50),
+                                                //     fontWeight = FontWeight.Bold,
+                                                //     fontSize = 16.adaptiveSp()
+                                                // )
                                             }
                                             is WaitingState.PaidWaiting -> {
                                                 val mins = ws.secondsElapsed / 60
@@ -909,8 +926,6 @@ fun DriverHomeScreen(navController: NavController) {
                                             is WaitingState.Expired -> {
                                                 LaunchedEffect(Unit) {
                                                     try {
-                                                        val endTime = waitingTimerManager.paidEndTime.value
-                                                        // apiService.driverComplete("Bearer $token", order.id, trackJson, paidEndTime)
                                                         driverViewModel.resetOrderStates()
                                                         waitingTimerManager.reset()
                                                     } catch (e: Exception) {
@@ -977,7 +992,7 @@ fun DriverHomeScreen(navController: NavController) {
                                                             order.id
                                                         )
                                                         driverViewModel.setArrived(true)
-                                                        scope.launch { waitingTimerManager.onArrived(scope) }
+                                                            //  scope.launch { waitingTimerManager.onArrived(scope) }
                                                     } catch (e: Exception) {
                                                         Log.e(TAG, "Ошибка прибытия", e)
                                                     }
@@ -1113,8 +1128,8 @@ fun DriverHomeScreen(navController: NavController) {
                                                     endPoint = endStr,
                                                     startAddress = createFromAddress,
                                                     endAddress = createToAddress,
-                                                    pet = null,
-                                                    load = null //todo не должно быть налла
+                                                    pet = false,
+                                                    load = false //todo не должно быть налла
                                                 )
 
                                             )

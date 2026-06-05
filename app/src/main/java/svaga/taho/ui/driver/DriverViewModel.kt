@@ -114,6 +114,7 @@ class DriverViewModel @Inject constructor(
             _isTracking.value = false
             _shouldTrack.value = false
             _zaezdCount.value = 0
+            clearPaidWaitingMinutes()
         }
     }
 

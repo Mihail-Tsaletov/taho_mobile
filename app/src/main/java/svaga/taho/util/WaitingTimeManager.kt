@@ -104,6 +104,31 @@ class WaitingTimerManager @Inject constructor(
             }
         }
     }
+    fun startPaidWaiting(scope: CoroutineScope) {
+        val paidStartMs = System.currentTimeMillis()
+        timerJob?.cancel()
+        timerJob = scope.launch {
+            while (isActive) {
+                val now = System.currentTimeMillis()
+                val paidElapsed = now - paidStartMs
+                val secondsElapsed = (paidElapsed / 1000).toInt()
+
+                if (paidElapsed < PAID_WAIT_MS) {
+                    _state.value = WaitingState.PaidWaiting(secondsElapsed)
+                    val minutesElapsed = paidElapsed / 1000.0 / 60.0
+                    _paidEndTime.value = String.format("%.1f", minutesElapsed).replace(",", ".")
+                } else {
+                    val minutesElapsed = paidElapsed / 1000.0 / 60.0
+                    _paidEndTime.value = String.format("%.1f", minutesElapsed).replace(",", ".")
+                    _state.value = WaitingState.Expired
+                    timerJob?.cancel()
+                    break
+                }
+
+                delay(1000)
+            }
+        }
+    }
 
     /**
      * Вызывай когда пассажир забран (PICKED_UP) или заказ завершён/отменён

@@ -86,8 +86,8 @@ interface ApiService {
     suspend fun getOrdersByDriverId(
         @Header("Authorization") token: String,
         @Query("driverId") driverId: String,
-        @Query("from") from: String? = null,
-        @Query("to") to: String? = null
+        @Query("from") from: String = "nulаl",
+        @Query("to") to: String = "nulаl"
     ): List<OrderWeb>
 
     @POST("api/orders/createByDriver")
@@ -124,8 +124,8 @@ data class CreateOrderRequest(
     val endPoint: String,
     val startAddress: String,
     val endAddress: String,
-    val pet: Boolean? = null,
-    val load: Boolean? = null
+    val pet: Boolean = false,
+    val load: Boolean = false
 )
 
 data class RegisterRequest(

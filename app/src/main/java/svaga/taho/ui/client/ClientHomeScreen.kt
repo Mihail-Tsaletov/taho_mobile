@@ -993,8 +993,8 @@ fun ClientHomeScreen(navController: NavController) {
                                         endPoint     = endStr,
                                         startAddress = fromAddress,
                                         endAddress   = toAddress,
-                                        pet = if (hasPet) true else null,
-                                        load = if (hasLoad) true else null
+                                        pet = if (hasPet) true else false,
+                                        load = if (hasLoad) true else false
                                     )
 
                                     try {
