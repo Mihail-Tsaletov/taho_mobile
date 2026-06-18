@@ -833,7 +833,7 @@ fun ClientHomeScreen(navController: NavController) {
                             )
 
                             if (focusedField == "from" && fromSuggestions.isNotEmpty()) {
-                                LazyColumn(modifier = Modifier.heightIn(max = 230.adaptiveDp())) {
+                                LazyColumn(modifier = Modifier.heightIn(max = 140.adaptiveDp())) {
                                     items(fromSuggestions) { item ->
                                         val text = item.displayText ?: item.title.text
                                         Text(
@@ -875,7 +875,7 @@ fun ClientHomeScreen(navController: NavController) {
                             )
 
                             if (focusedField == "to" && toSuggestions.isNotEmpty()) {
-                                LazyColumn(modifier = Modifier.heightIn(max = 240.adaptiveDp())) {
+                                LazyColumn(modifier = Modifier.heightIn(max = 140.adaptiveDp())) {
                                     items(toSuggestions) { item ->
                                         val text = item.displayText ?: item.title.text
                                         Text(
