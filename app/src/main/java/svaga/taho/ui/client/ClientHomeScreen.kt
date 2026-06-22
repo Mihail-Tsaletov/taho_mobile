@@ -30,8 +30,6 @@ import com.yandex.mapkit.geometry.BoundingBox
 import com.yandex.runtime.Error
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
-import java.text.SimpleDateFormat
-import java.util.*
 import android.util.Log
 import com.yandex.mapkit.map.PlacemarkMapObject
 import android.widget.Toast
@@ -42,7 +40,6 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import dagger.hilt.android.EntryPointAccessors
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.CreateOrderRequest
@@ -55,6 +52,7 @@ import svaga.taho.util.WaitingState
 import svaga.taho.util.adaptiveDp
 import svaga.taho.util.adaptiveSp
 import kotlin.coroutines.resume
+import androidx.core.net.toUri
 
 private const val TAG = "ClientHomeScreen"
 
@@ -174,9 +172,7 @@ fun ClientHomeScreen(navController: NavController) {
     LaunchedEffect(Unit) {
         activeOrderManager.loadActiveOrderForClient()
     }
-    LaunchedEffect(activeOrder?.id) {
-        // Крутим пока есть активный заказ
-    }
+
 
 // ← Автоматический расчёт цены при изменении точек
     LaunchedEffect(fromPoint, toPoint) {
@@ -337,9 +333,16 @@ fun ClientHomeScreen(navController: NavController) {
 
     // Подсказки при вводе текста
     LaunchedEffect(fromInput, focusedField) {
-        val box = BoundingBox(Point(41.0, 19.0), Point(74.0, 180.0))
         if (focusedField == "from" && fromInput.length > 2) {
-            suggestSession.suggest(fromInput, box, SuggestOptions(), object : SuggestSession.SuggestListener {
+            val center = mapViewState.value?.mapWindow?.map?.cameraPosition?.target
+                ?: Point(48.0397, 38.7697)
+            val delta = 0.5
+            val box = BoundingBox(
+                Point(center.latitude - delta, center.longitude - delta),
+                Point(center.latitude + delta, center.longitude + delta)
+            )
+            val options = SuggestOptions().apply { userPosition = center }
+            suggestSession.suggest(fromInput, box, options, object : SuggestSession.SuggestListener {
                 override fun onResponse(response: SuggestResponse) { fromSuggestions = response.items.take(8) }
                 override fun onError(error: Error) { fromSuggestions = emptyList() }
             })
@@ -347,14 +350,22 @@ fun ClientHomeScreen(navController: NavController) {
     }
 
     LaunchedEffect(toInput, focusedField) {
-        val box = BoundingBox(Point(41.0, 19.0), Point(74.0, 180.0))
         if (focusedField == "to" && toInput.length > 2) {
-            suggestSession.suggest(toInput, box, SuggestOptions(), object : SuggestSession.SuggestListener {
+            val center = mapViewState.value?.mapWindow?.map?.cameraPosition?.target
+                ?: Point(48.0397, 38.7697)
+            val delta = 0.5
+            val box = BoundingBox(
+                Point(center.latitude - delta, center.longitude - delta),
+                Point(center.latitude + delta, center.longitude + delta)
+            )
+            val options = SuggestOptions().apply { userPosition = center }
+            suggestSession.suggest(toInput, box, options, object : SuggestSession.SuggestListener {
                 override fun onResponse(response: SuggestResponse) { toSuggestions = response.items.take(8) }
                 override fun onError(error: Error) { toSuggestions = emptyList() }
             })
         } else toSuggestions = emptyList()
     }
+
 
     // Получение адреса по координатам (обратное геокодирование)
     suspend fun getAddressFromPoint(point: Point): String = suspendCancellableCoroutine { cont ->
@@ -585,7 +596,8 @@ fun ClientHomeScreen(navController: NavController) {
                                 Spacer(Modifier.height(20.adaptiveDp()))
                                 Button(
                                     onClick = {
-                                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:+71234567890"))
+                                        val intent = Intent(Intent.ACTION_DIAL,
+                                            "tel:+79495895834".toUri())
                                         context.startActivity(intent)
                                     },
                                     modifier = Modifier.fillMaxWidth(),
@@ -637,7 +649,8 @@ fun ClientHomeScreen(navController: NavController) {
                                 Spacer(Modifier.height(20.adaptiveDp()))
                                 Button(
                                     onClick = {
-                                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:+71234567890"))  //TODO Исправить везде номер телефона манагера
+                                        val intent = Intent(Intent.ACTION_DIAL,
+                                            "tel:+79495895834".toUri())  //TODO Исправить везде номер телефона манагера
                                         context.startActivity(intent)
                                     },
                                     modifier = Modifier.fillMaxWidth(),
@@ -993,8 +1006,8 @@ fun ClientHomeScreen(navController: NavController) {
                                         endPoint     = endStr,
                                         startAddress = fromAddress,
                                         endAddress   = toAddress,
-                                        pet = if (hasPet) true else false,
-                                        load = if (hasLoad) true else false
+                                        pet = hasPet,
+                                        load = hasLoad
                                     )
 
                                     try {

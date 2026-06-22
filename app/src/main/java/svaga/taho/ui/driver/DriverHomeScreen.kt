@@ -27,13 +27,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.yandex.mapkit.MapKitFactory
 import com.yandex.mapkit.geometry.Point
-import com.yandex.mapkit.geometry.Polyline
 import com.yandex.mapkit.map.*
 import com.yandex.mapkit.mapview.MapView
 import com.yandex.runtime.image.ImageProvider
@@ -58,8 +56,6 @@ import com.yandex.mapkit.search.SuggestResponse
 import com.yandex.mapkit.search.SuggestSession
 import svaga.taho.util.WaitingState
 import svaga.taho.util.location.TrackManager
-import java.math.BigDecimal
-import java.math.RoundingMode
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.foundation.lazy.items
@@ -96,7 +92,6 @@ fun DriverHomeScreen(navController: NavController) {
     val waitingState by waitingTimerManager.state.collectAsState()
     val savedPaidWaitingMinutes by driverViewModel.savedPaidWaitingMinutes.collectAsState()
     val showRejected by driverViewModel.showRejected.collectAsState()
-    val shouldCloseAssignedCard by driverViewModel.shouldCloseAssignedCard.collectAsState()
     val completedPrice by driverViewModel.completedPrice.collectAsState()
 
 
@@ -130,6 +125,12 @@ fun DriverHomeScreen(navController: NavController) {
     val zaezdCount by driverViewModel.zaezdCount.collectAsState()
     var showZaezdConfirmDialog by remember { mutableStateOf(false) }
     var showCompleteConfirmDialog by remember { mutableStateOf(false) }
+
+    // Выбор точки на карте
+    // var selectingPoint by remember { mutableStateOf<String?>(null) } // "from", "to" или null
+    var fromPlacemark  by remember { mutableStateOf<PlacemarkMapObject?>(null) }
+    var toPlacemark    by remember { mutableStateOf<PlacemarkMapObject?>(null) }
+    val mapViewState   = remember { mutableStateOf<MapView?>(null) }
 
 
 
@@ -473,31 +474,49 @@ fun DriverHomeScreen(navController: NavController) {
         }
     }
 
-    LaunchedEffect(createFromAddress, createFocusedField) {
-        val box = BoundingBox(Point(41.0, 19.0), Point(74.0, 180.0))
+    LaunchedEffect(createFromAddress, createFocusedField, mapViewState) {
         if (createFocusedField == "from" && createFromAddress.length > 2) {
-            createSuggestSession.suggest(createFromAddress, box, SuggestOptions(), object : SuggestSession.SuggestListener {
-                override fun onResponse(response: SuggestResponse) { createFromSuggestions = response.items.take(6) }
-                override fun onError(error: com.yandex.runtime.Error) { createFromSuggestions = emptyList() }
+            val center = mapViewState.value?.mapWindow?.map?.cameraPosition?.target
+                ?: Point(48.0397, 38.7697)
+            val delta = 0.5
+            val box = BoundingBox(
+                Point(center.latitude - delta, center.longitude - delta),
+                Point(center.latitude + delta, center.longitude + delta))
+            val options = SuggestOptions().apply { userPosition = center }
+            createSuggestSession.suggest(createFromAddress, box, options, object : SuggestSession.SuggestListener {
+                    override fun onResponse(response: SuggestResponse) { createFromSuggestions = response.items.take(8) }
+                    override fun onError(error: com.yandex.runtime.Error) { createFromSuggestions = emptyList() }
             })
-        } else createFromSuggestions = emptyList()
+        } else {
+            createFromSuggestions = emptyList()
+        }
     }
 
-    LaunchedEffect(createToAddress, createFocusedField) {
-        val box = BoundingBox(Point(41.0, 19.0), Point(74.0, 180.0))
+    LaunchedEffect(createToAddress, createFocusedField, mapViewState) {
         if (createFocusedField == "to" && createToAddress.length > 2) {
-            createSuggestSession.suggest(createToAddress, box, SuggestOptions(), object : SuggestSession.SuggestListener {
-                override fun onResponse(response: SuggestResponse) { createToSuggestions = response.items.take(6) }
-                override fun onError(error: com.yandex.runtime.Error) { createToSuggestions = emptyList() }
-            })
-        } else createToSuggestions = emptyList()
+            val center = mapViewState.value?.mapWindow?.map?.cameraPosition?.target
+                ?: Point(48.0397, 38.7697)
+            val delta = 0.5
+            val box = BoundingBox(
+                Point(center.latitude - delta, center.longitude - delta),
+                Point(center.latitude + delta, center.longitude + delta)
+            )
+            val options = SuggestOptions().apply { userPosition = center }
+            createSuggestSession.suggest(createToAddress, box, options, object : SuggestSession.SuggestListener {
+                    override fun onResponse(response: SuggestResponse) { createToSuggestions = response.items.take(8) }
+                    override fun onError(error: com.yandex.runtime.Error) { createToSuggestions = emptyList() }
+                })
+        } else {
+            createToSuggestions = emptyList()
+        }
     }
+
 
     LaunchedEffect(currentOrder?.id, isPickedUp, shouldTrack) {
         if (currentOrder == null || !isPickedUp || !shouldTrack || !TrackManager.isTracking().not()) {
             return@LaunchedEffect
         }
-        if (isPickedUp && shouldTrack && !TrackManager.isTracking()) {
+        if (!TrackManager.isTracking()) {
 
             Log.d(TAG, "Экран вернулся — возобновляем трекинг")
             TrackManager.startTracking(
@@ -714,7 +733,8 @@ fun DriverHomeScreen(navController: NavController) {
                                     Spacer(Modifier.height(20.adaptiveDp()))
                                     Button(
                                         onClick = {
-                                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:+71234567890"))  //TODO Исправить везде номер телефона манагера
+                                            val intent = Intent(Intent.ACTION_DIAL,
+                                                "tel:+79495895834".toUri())  //TODO Исправить везде номер телефона манагера
                                             context.startActivity(intent)
                                         },
                                         modifier = Modifier.fillMaxWidth(),
@@ -1015,7 +1035,7 @@ fun DriverHomeScreen(navController: NavController) {
                         .align(Alignment.TopStart)
                         .padding(16.adaptiveDp())
                 )
-                if (currentOrder == null) {
+                if (currentOrder == null && driverStatus == "AVAILABLE") {
                     FloatingActionButton(
                         onClick = { showCreateOrderSheet = true },
                         modifier = Modifier
@@ -1326,7 +1346,7 @@ fun DriverHomeScreen(navController: NavController) {
                                                 Toast.makeText(context, "Поездка завершена", Toast.LENGTH_SHORT).show()
                                                 TrackManager.clearTrack()
                                                 driverViewModel.setTracking(false)
-                                                driverViewModel.resetOrderStates() // сбросит и zaezdCount
+                                                driverViewModel.resetOrderStates()
                                                 loadDriverProfile()
                                                 createFromAddress = ""
                                                 createToAddress = ""
