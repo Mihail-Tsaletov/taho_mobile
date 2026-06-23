@@ -116,6 +116,7 @@ fun DriverHomeScreen(navController: NavController) {
     var showStatusSheet by remember { mutableStateOf(false) }
     var newOrdersSseJob by remember { mutableStateOf<Job?>(null) }
     var orderUpdatesSseJob by remember { mutableStateOf<Job?>(null) }
+    var realOrderStatus by remember { mutableStateOf("ASSIGNED") }
 
     var showCreateOrderSheet by remember { mutableStateOf(false) }
     var createFromAddress by remember { mutableStateOf("") }
@@ -400,7 +401,7 @@ fun DriverHomeScreen(navController: NavController) {
             }
 
             // ←←← НОВЫЙ ЗАКАЗ
-            if (status == "ASSIGNED" || json.has("id")) {
+            if (status == "ASSIGNED" || status == "ACCEPTED" || json.has("id")) {
                 Log.d(TAG, "ДЕТЕКТИРОВАН НОВЫЙ ЗАКАЗ ASSIGNED!")
 
                 val order = runCatching {
@@ -423,6 +424,7 @@ fun DriverHomeScreen(navController: NavController) {
                     Log.e(TAG, "Не удалось распарсить новый заказ")
                     return@collect
                 }
+                realOrderStatus = status
 
                 Log.d(TAG, "Новый заказ успешно распарсен: ${order.id} от ${order.startAddress} → ${order.endAddress}")
 
@@ -863,25 +865,26 @@ fun DriverHomeScreen(navController: NavController) {
                                     ) {
                                         Text("Принять", color = Color(0xFFE91E63))
                                     }
-                                    OutlinedButton(
-                                        onClick = {
-                                            scope.launch {
-                                                try {
-                                                    stopNotificationSound()
-                                                    apiService.cancelOrder("Bearer $token", order.id)
-                                                } catch (e: Exception) {
-
-                                                    stopNotificationSound()
-                                                    Log.e(TAG, "Ошибка отклонения заказа", e)
+                                    if (realOrderStatus == "ASSIGNED") {
+                                        OutlinedButton(
+                                            onClick = {
+                                                scope.launch {
+                                                    try {
+                                                        stopNotificationSound()
+                                                        apiService.cancelOrder("Bearer $token", order.id)
+                                                    } catch (e: Exception) {
+                                                        stopNotificationSound()
+                                                        Log.e(TAG, "Ошибка отклонения заказа", e)
+                                                    }
+                                                    driverViewModel.setCurrentOrder(null)
+                                                    driverViewModel.resetOrderStates()
+                                                    loadDriverProfile()
                                                 }
-                                                driverViewModel.setCurrentOrder(null)
-                                                driverViewModel.resetOrderStates()
-                                                loadDriverProfile()
-                                            }
-                                        },
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Text("Отклонить", color = Color.White)
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("Отклонить", color = Color.White)
+                                        }
                                     }
                                 }
                             } else { // ← АКТИВНЫЙ ЗАКАЗ
@@ -1475,6 +1478,7 @@ fun DriverHomeScreen(navController: NavController) {
                                                 TrackManager.clearTrack()
                                                 driverViewModel.setTracking(false)
                                                 driverViewModel.resetOrderStates()
+                                                activeOrderManager.clear()
                                                 loadDriverProfile()
                                                 createFromAddress = ""
                                                 createToAddress = ""

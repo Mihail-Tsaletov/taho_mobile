@@ -73,7 +73,7 @@ fun ClientHomeScreen(navController: NavController) {
     val waitingTimerManager = remember {
         EntryPointAccessors.fromApplication(context.applicationContext, AppModule.ApiProvider::class.java).waitingTimerManager()
     }
-    val waitingState by waitingTimerManager.state.collectAsState()
+    //val waitingState by waitingTimerManager.state.collectAsState()
 
     val clientViewModel: ClientViewModel = hiltViewModel()
     val currentStatus by clientViewModel.currentStatus.collectAsState()
@@ -735,7 +735,7 @@ fun ClientHomeScreen(navController: NavController) {
                                     Text("Водитель: $name", fontWeight = FontWeight.Medium, fontSize = 18.adaptiveSp())
                                 }
 
-                                when (val ws = waitingState) {
+                             /*   when (val ws = waitingState) {
                                     is WaitingState.FreeWaiting -> {
                                         val mins = ws.secondsLeft / 60
                                         val secs = ws.secondsLeft % 60
@@ -780,7 +780,7 @@ fun ClientHomeScreen(navController: NavController) {
                                         )
                                     }
                                     else -> {}
-                                }
+                                } */
 
                               /**  driverPhone?.let { phone ->
                                     Spacer(Modifier.height(4.adaptiveDp()))
@@ -1022,6 +1022,7 @@ fun ClientHomeScreen(navController: NavController) {
                             onClick = {
                                 coroutineScope.launch {
                                     isOrderPlaced = true
+                                    selectingPointMode = null
 
                                     val startStr = fromPoint?.let { "${it.latitude}, ${it.longitude}" } ?: ""
                                     val endStr   = toPoint?.let   { "${it.latitude}, ${it.longitude}" } ?: ""
