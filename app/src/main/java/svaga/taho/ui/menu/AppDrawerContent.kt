@@ -40,6 +40,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import svaga.taho.ui.auth.AuthViewModel
 import androidx.core.net.toUri
+import svaga.taho.ui.client.ClientViewModel
 
 @Composable
 fun AppDrawerContent(
@@ -54,6 +55,8 @@ fun AppDrawerContent(
 
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showRoleChangeConfirm by remember { mutableStateOf(false) }
+    val clientViewModel: ClientViewModel = hiltViewModel()
+
 
     Column(
         modifier = Modifier
@@ -150,6 +153,7 @@ fun AppDrawerContent(
             confirmButton = {
                 TextButton(onClick = {
                     showLogoutConfirm = false
+                    clientViewModel.resetOrderState()
                     authViewModel.logout()
                     onCloseDrawer()
                 }) { Text("Да") }

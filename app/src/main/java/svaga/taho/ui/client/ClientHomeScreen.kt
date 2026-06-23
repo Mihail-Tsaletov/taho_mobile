@@ -36,6 +36,7 @@ import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
@@ -113,6 +114,7 @@ fun ClientHomeScreen(navController: NavController) {
     var fromPlacemark  by remember { mutableStateOf<PlacemarkMapObject?>(null) }
     var toPlacemark    by remember { mutableStateOf<PlacemarkMapObject?>(null) }
     val mapViewState   = remember { mutableStateOf<MapView?>(null) }
+    var selectingPointMode by remember { mutableStateOf<String?>(null) }
 
     val searchManager = remember {
         SearchFactory.getInstance().createSearchManager(SearchManagerType.COMBINED)
@@ -165,6 +167,15 @@ fun ClientHomeScreen(navController: NavController) {
         hasPet = false
         hasLoad = false
         showExtraOptions = false
+        fromPlacemark?.let {
+            mapViewState.value?.mapWindow?.map?.mapObjects?.remove(it)
+            fromPlacemark = null
+        }
+
+        toPlacemark?.let {
+            mapViewState.value?.mapWindow?.map?.mapObjects?.remove(it)
+            toPlacemark = null
+        }
         activeOrderManager.clear()
     }
 
@@ -405,30 +416,27 @@ fun ClientHomeScreen(navController: NavController) {
 
     // Обработчик нажатия на карту
     fun handleMapTap(point: Point) {
-        val mode = focusedField ?: return   // если ничего не в фокусе — игнорируем тап
-
+        val mode = selectingPointMode ?: return
         coroutineScope.launch {
             val address = getAddressFromPoint(point)
             val displayAddr = address.ifBlank { "Выбрано на карте" }
-
             when (mode) {
                 "from" -> {
                     fromPoint = point
                     fromAddress = displayAddr
-                    fromInput = displayAddr          // синхронизируем поле ввода
+                    fromInput = displayAddr
                     updatePlacemark("from", point)
                 }
                 "to" -> {
                     toPoint = point
                     toAddress = displayAddr
-                    toInput = displayAddr            // синхронизируем поле ввода
+                    toInput = displayAddr
                     updatePlacemark("to", point)
                 }
             }
-
-            // Опционально: убираем фокус после выбора точки
             focusManager.clearFocus()
             focusedField = null
+            selectingPointMode = null
         }
     }
 
@@ -499,6 +507,22 @@ fun ClientHomeScreen(navController: NavController) {
                         MapKitFactory.getInstance().onStart()
                     }
                 )
+                if (selectingPointMode != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 16.dp, start = 16.dp, end = 16.dp)
+                            .background(Color(0xCC000000), shape = MaterialTheme.shapes.medium)
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = if (selectingPointMode == "from") "Тапните на карту — откуда" else "Тапните на карту — куда",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+                }
 
                CallOperatorButton(
                     modifier = Modifier
@@ -548,18 +572,8 @@ fun ClientHomeScreen(navController: NavController) {
                                 Button(
                                     onClick = {
                                         clientViewModel.dismissCompletion()
-                                        fromAddress = "Откуда"
-                                        toAddress = "Куда едем?"
-                                        isOrderPlaced = false
-                                        fromPlacemark?.let {
-                                            mapViewState.value?.mapWindow?.map?.mapObjects?.remove(it)
-                                            fromPlacemark = null
-                                        }
+                                        resetOrderState()
 
-                                        toPlacemark?.let {
-                                            mapViewState.value?.mapWindow?.map?.mapObjects?.remove(it)
-                                            toPlacemark = null
-                                        }
                                     },
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
@@ -609,9 +623,7 @@ fun ClientHomeScreen(navController: NavController) {
                                 Button(
                                             onClick = {
                                         clientViewModel.dismissCancelled()
-                                        fromAddress = "Откуда"
-                                        toAddress = "Куда едем?"
-                                        isOrderPlaced = false
+                                        resetOrderState()
                                     },
 
                                     modifier = Modifier.fillMaxWidth(),
@@ -662,9 +674,7 @@ fun ClientHomeScreen(navController: NavController) {
                                 Button(
                                     onClick = {
                                         clientViewModel.dismissRejected()
-                                        fromAddress = "Откуда"
-                                        toAddress = "Куда едем?"
-                                        isOrderPlaced = false
+                                        resetOrderState()
                                     },
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
@@ -677,7 +687,7 @@ fun ClientHomeScreen(navController: NavController) {
                     }
 
                     if (showOrderDetails || (isOrderPlaced && activeOrder == null)) {
-                        // ← Детали заказа (как было раньше)
+                        // ← Детали заказа
                         Card(
                             colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
                             modifier = Modifier.fillMaxWidth()
@@ -842,7 +852,15 @@ fun ClientHomeScreen(navController: NavController) {
                                 colors = TextFieldDefaults.colors(
                                     focusedIndicatorColor = Color.Transparent,
                                     unfocusedIndicatorColor = Color.Transparent
-                                )
+                                ),
+                                trailingIcon = {
+                                    IconButton(onClick = {
+                                        selectingPointMode = "from"
+                                        focusManager.clearFocus()
+                                    }) {
+                                        Icon(Icons.Default.LocationOn, contentDescription = "Выбрать на карте", tint = Color(0xFF1E88E5))
+                                    }
+                                }
                             )
 
                             if (focusedField == "from" && fromSuggestions.isNotEmpty()) {
@@ -871,7 +889,7 @@ fun ClientHomeScreen(navController: NavController) {
 
                         Spacer(Modifier.height(4.adaptiveDp()))
 
-                        // Поле Куда — ВОТ ЭТОТ БЛОК БЫЛ ПРОПУЩЕН
+                        // Поле Куда
                         Column {
                             OutlinedTextField(
                                 value = if (focusedField == "to") toInput else toAddress,
@@ -884,9 +902,16 @@ fun ClientHomeScreen(navController: NavController) {
                                 colors = TextFieldDefaults.colors(
                                     focusedIndicatorColor = Color.Transparent,
                                     unfocusedIndicatorColor = Color.Transparent
-                                )
+                                ),
+                                trailingIcon = {
+                                    IconButton(onClick = {
+                                        selectingPointMode = "to"
+                                        focusManager.clearFocus()
+                                    }) {
+                                        Icon(Icons.Default.LocationOn, contentDescription = "Выбрать на карте", tint = Color(0xFF1E88E5))
+                                    }
+                                }
                             )
-
                             if (focusedField == "to" && toSuggestions.isNotEmpty()) {
                                 LazyColumn(modifier = Modifier.heightIn(max = 140.adaptiveDp())) {
                                     items(toSuggestions) { item ->
