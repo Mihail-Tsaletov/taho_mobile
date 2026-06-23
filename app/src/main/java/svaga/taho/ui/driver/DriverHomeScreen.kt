@@ -59,6 +59,13 @@ import svaga.taho.util.location.TrackManager
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.foundation.lazy.items
+import com.yandex.mapkit.search.Response
+import com.yandex.mapkit.search.SearchOptions
+import com.yandex.mapkit.search.Session
+import com.yandex.mapkit.search.ToponymObjectMetadata
+import com.yandex.runtime.Error
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.suspendCancellableCoroutine
 import svaga.taho.data.remote.CreateOrderRequest
 import svaga.taho.service.TahoSseService
 import svaga.taho.ui.components.CallOperatorButton
@@ -66,6 +73,9 @@ import svaga.taho.util.adaptiveDp
 import svaga.taho.util.adaptiveSp
 import svaga.taho.util.playRepeatingNotificationSound
 import svaga.taho.util.stopNotificationSound
+import kotlin.coroutines.resume
+import androidx.compose.material.icons.filled.Close
+
 
 private const val TAG = "DriverHomeScreen"
 
@@ -131,6 +141,65 @@ fun DriverHomeScreen(navController: NavController) {
     var fromPlacemark  by remember { mutableStateOf<PlacemarkMapObject?>(null) }
     var toPlacemark    by remember { mutableStateOf<PlacemarkMapObject?>(null) }
     val mapViewState   = remember { mutableStateOf<MapView?>(null) }
+    var selectingPointMode by remember { mutableStateOf<String?>(null) } // "from", "to" или null
+    var createFromPlacemark by remember { mutableStateOf<PlacemarkMapObject?>(null) }
+    var createToPlacemark by remember { mutableStateOf<PlacemarkMapObject?>(null) }
+    val createMapObjects = remember { mutableStateOf<MapObjectCollection?>(null) }
+
+    val searchManager = remember {
+        SearchFactory.getInstance().createSearchManager(SearchManagerType.COMBINED)
+    }
+
+    suspend fun getAddressFromPoint(point: Point): String = suspendCancellableCoroutine { cont ->
+        val session = searchManager.submit(point, 16, SearchOptions(), object : Session.SearchListener {
+            override fun onSearchResponse(response: Response) {
+                val address = response.collection.children.firstOrNull()
+                    ?.obj
+                    ?.metadataContainer
+                    ?.getItem(ToponymObjectMetadata::class.java)
+                    ?.address
+                    ?.formattedAddress ?: ""
+                cont.resume(address)
+            }
+            override fun onSearchError(error: Error) {
+                cont.resume("")
+            }
+        })
+        cont.invokeOnCancellation { session.cancel() }
+    }
+
+
+    fun handleMapTap(point: Point) {
+        val mode = selectingPointMode ?: return
+        scope.launch {
+            val address = getAddressFromPoint(point)
+            val displayAddr = address.ifBlank { "Выбрано на карте" }
+            when (mode) {
+                "from" -> {
+                    createFromPoint = point
+                    createFromAddress = displayAddr
+                    createFromPlacemark?.let { createMapObjects.value?.remove(it) }
+                    createFromPlacemark = createMapObjects.value?.addPlacemark(point)
+                }
+                "to" -> {
+                    createToPoint = point
+                    createToAddress = displayAddr
+                    createToPlacemark?.let { createMapObjects.value?.remove(it) }
+                    createToPlacemark = createMapObjects.value?.addPlacemark(point)
+                }
+            }
+            selectingPointMode = null
+        }
+    }
+
+    val mapInputListener = remember {
+        object : InputListener {
+            override fun onMapTap(map: com.yandex.mapkit.map.Map, point: Point) {
+                handleMapTap(point)
+            }
+            override fun onMapLongTap(map: com.yandex.mapkit.map.Map, point: Point) {}
+        }
+    }
 
 
 
@@ -640,8 +709,9 @@ fun DriverHomeScreen(navController: NavController) {
                     factory = { ctx ->
                         MapView(ctx).apply {
                             mapWindow.map.move(CameraPosition(Point(48.0397, 38.7697), 12f, 0f, 0f))
-                            mapWindow.map.mapObjects
-                            // Устанавливаем русский язык для подписей
+                            createMapObjects.value = mapWindow.map.mapObjects
+                            mapViewState.value = this
+                            mapWindow.map.addInputListener(mapInputListener)
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
@@ -1054,34 +1124,81 @@ fun DriverHomeScreen(navController: NavController) {
 
 // Модалка создания заказа
                 if (showCreateOrderSheet) {
-                    ModalBottomSheet(
-                        onDismissRequest = { showCreateOrderSheet = false }
+                    // Подсказка режима выбора точки
+                    if (selectingPointMode != null) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 14.adaptiveDp(), start = 14.adaptiveDp(), end = 14.adaptiveDp())
+                                .background(Color(0xCC000000), shape = MaterialTheme.shapes.medium)
+                                .padding(12.adaptiveDp())
+                        ) {
+                            Text(
+                                text = if (selectingPointMode == "from") "Откуда" else "Куда",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.adaptiveSp()
+                            )
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(14.adaptiveDp()),
+                        elevation = CardDefaults.cardElevation(12.adaptiveDp())
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.adaptiveDp())
+                                .padding(14.adaptiveDp())
                                 .navigationBarsPadding()
                         ) {
-                            Text(
-                                "Создать заказ",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 20.adaptiveSp()
-                            )
-                            Spacer(Modifier.height(16.adaptiveDp()))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Создать заказ", fontWeight = FontWeight.Bold, fontSize = 15.adaptiveSp())
+                                IconButton(onClick = {
+                                    showCreateOrderSheet = false
+                                    selectingPointMode = null
+                                    createFromPlacemark?.let { createMapObjects.value?.remove(it) }
+                                    createToPlacemark?.let { createMapObjects.value?.remove(it) }
+                                    createFromPlacemark = null
+                                    createToPlacemark = null
+                                    createFromAddress = ""
+                                    createToAddress = ""
+                                    createFromPoint = null
+                                    createToPoint = null
+                                }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Закрыть")
+                                }
+                            }
+
+                            Spacer(Modifier.height(4.adaptiveDp()))
 
                             // Поле Откуда
                             OutlinedTextField(
                                 value = createFromAddress,
-                                onValueChange = { createFromAddress = it },
+                                onValueChange = {
+                                    createFromAddress = it
+                                    createFromPoint = null
+                                },
                                 label = { Text("Откуда") },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .onFocusChanged { if (it.isFocused) createFocusedField = "from" },
-                                singleLine = true
+                                singleLine = true,
+                                trailingIcon = {
+                                    IconButton(onClick = { selectingPointMode = "from" }) {
+                                        Icon(Icons.Default.LocationOn, contentDescription = "Выбрать на карте", tint = Color(0xFF1E88E5))
+                                    }
+                                }
                             )
                             if (createFocusedField == "from" && createFromSuggestions.isNotEmpty()) {
-                                LazyColumn(modifier = Modifier.heightIn(max = 200.adaptiveDp())) {
+                                LazyColumn(modifier = Modifier.heightIn(max = 160.adaptiveDp())) {
                                     items(createFromSuggestions) { item ->
                                         val text = item.displayText ?: item.title.text
                                         Text(
@@ -1090,7 +1207,13 @@ fun DriverHomeScreen(navController: NavController) {
                                                 .fillMaxWidth()
                                                 .clickable {
                                                     createFromAddress = text
-                                                    createFromPoint = item.center
+                                                    if (item.center != null) {
+                                                        createFromPoint = item.center
+                                                        createFromPlacemark?.let { createMapObjects.value?.remove(it) }
+                                                        createFromPlacemark = createMapObjects.value?.addPlacemark(item.center!!)
+                                                    } else {
+                                                        createFromPoint = null // явно сбрасываем если нет координат
+                                                    }
                                                     createFocusedField = null
                                                 }
                                                 .padding(12.adaptiveDp())
@@ -1100,20 +1223,28 @@ fun DriverHomeScreen(navController: NavController) {
                                 }
                             }
 
-                            Spacer(Modifier.height(12.adaptiveDp()))
+                            Spacer(Modifier.height(5.adaptiveDp()))
 
                             // Поле Куда
                             OutlinedTextField(
                                 value = createToAddress,
-                                onValueChange = { createToAddress = it },
+                                onValueChange = {
+                                    createToAddress = it
+                                    createToPoint = null
+                                },
                                 label = { Text("Куда") },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .onFocusChanged { if (it.isFocused) createFocusedField = "to" },
-                                singleLine = true
+                                singleLine = true,
+                                trailingIcon = {
+                                    IconButton(onClick = { selectingPointMode = "to" }) {
+                                        Icon(Icons.Default.LocationOn, contentDescription = "Выбрать на карте", tint = Color(0xFF1E88E5))
+                                    }
+                                }
                             )
                             if (createFocusedField == "to" && createToSuggestions.isNotEmpty()) {
-                                LazyColumn(modifier = Modifier.heightIn(max = 200.adaptiveDp())) {
+                                LazyColumn(modifier = Modifier.heightIn(max = 160.adaptiveDp())) {
                                     items(createToSuggestions) { item ->
                                         val text = item.displayText ?: item.title.text
                                         Text(
@@ -1122,7 +1253,13 @@ fun DriverHomeScreen(navController: NavController) {
                                                 .fillMaxWidth()
                                                 .clickable {
                                                     createToAddress = text
-                                                    createToPoint = item.center
+                                                    if (item.center != null) {
+                                                        createToPoint = item.center
+                                                        createToPlacemark?.let { createMapObjects.value?.remove(it) }
+                                                        createToPlacemark = createMapObjects.value?.addPlacemark(item.center!!)
+                                                    } else {
+                                                        createToPoint = null
+                                                    }
                                                     createFocusedField = null
                                                 }
                                                 .padding(12.adaptiveDp())
@@ -1139,8 +1276,10 @@ fun DriverHomeScreen(navController: NavController) {
                                     scope.launch {
                                         isCreatingOrder = true
                                         try {
+
                                             val startStr = createFromPoint?.let { "${it.latitude}, ${it.longitude}" } ?: ""
                                             val endStr = createToPoint?.let { "${it.latitude}, ${it.longitude}" } ?: ""
+
                                             val response = apiService.createOrderByDriver(
                                                 "Bearer $token",
                                                 CreateOrderRequest(
@@ -1148,36 +1287,31 @@ fun DriverHomeScreen(navController: NavController) {
                                                     endPoint = endStr,
                                                     startAddress = createFromAddress,
                                                     endAddress = createToAddress,
-                                                    pet = false,
-                                                    load = false //todo не должно быть налла
                                                 )
-
                                             )
+                                            Log.d(TAG, "startStr=$startStr endStr=$endStr from=$createFromAddress to=$createToAddress")
                                             delay(1000)
-
                                             if (!response.isSuccessful) {
                                                 val error = response.errorBody()?.string()
-                                                throw Exception("Ошибка сервера: ${response.code()} $error")
+                                                Log.e(TAG, "Ошибка сервера: ${response.code()} — $error")
+                                                throw Exception("Ошибка: ${response.code()} $error")
                                             }
-
-                                            val createdOrder = response.body()
-                                                ?: throw Exception("Пустой ответ сервера")
-
-                                            Log.d(TAG, "Order created: $createdOrder")
-
-
                                             driverViewModel.setArrived(true)
                                             driverViewModel.setPickedUp(true)
                                             driverViewModel.setTracking(false)
 
+                                            createFromPlacemark?.let { createMapObjects.value?.remove(it) }
+                                            createToPlacemark?.let { createMapObjects.value?.remove(it) }
+                                            createFromPlacemark = null
+                                            createToPlacemark = null
                                             showCreateOrderSheet = false
+                                            selectingPointMode = null
                                             createFromAddress = ""
                                             createToAddress = ""
                                             createFromPoint = null
                                             createToPoint = null
 
                                             Toast.makeText(context, "Заказ создан", Toast.LENGTH_SHORT).show()
-
                                         } catch (e: Exception) {
                                             Log.e(TAG, "Ошибка создания заказа", e)
                                             Toast.makeText(context, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -1189,14 +1323,8 @@ fun DriverHomeScreen(navController: NavController) {
                                 enabled = createFromPoint != null && createToPoint != null && !isCreatingOrder,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                if (isCreatingOrder) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.adaptiveDp()),
-                                        color = Color.White
-                                    )
-                                } else {
-                                    Text("Создать заказ")
-                                }
+                                if (isCreatingOrder) CircularProgressIndicator(modifier = Modifier.size(20.adaptiveDp()), color = Color.White)
+                                else Text("Создать заказ")
                             }
                         }
                     }
@@ -1380,6 +1508,7 @@ fun DriverHomeScreen(navController: NavController) {
 
     DisposableEffect(Unit) {
         onDispose {
+            mapViewState.value?.mapWindow?.map?.removeInputListener(mapInputListener)
             newOrdersSseJob?.cancel()
             orderUpdatesSseJob?.cancel()
             Log.d(TAG, "Экран закрыт — SSE отключён")

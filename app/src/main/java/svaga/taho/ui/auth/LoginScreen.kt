@@ -89,7 +89,7 @@ fun LoginScreen(
             onValueChange = { phoneDigits = it },
             label = { Text("Телефон") },
             modifier = Modifier.fillMaxWidth()
-        )
+         )
 
         // ── Телефон ──────────────────────────────────────────────
      /*   OutlinedTextField(
