@@ -3,7 +3,6 @@ package svaga.taho.ui.driver
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.util.Log
 import android.widget.Toast
@@ -34,10 +33,7 @@ import com.yandex.mapkit.MapKitFactory
 import com.yandex.mapkit.geometry.Point
 import com.yandex.mapkit.map.*
 import com.yandex.mapkit.mapview.MapView
-import com.yandex.runtime.image.ImageProvider
 import dagger.hilt.android.EntryPointAccessors
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -57,14 +53,12 @@ import com.yandex.mapkit.search.SuggestSession
 import svaga.taho.util.WaitingState
 import svaga.taho.util.location.TrackManager
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.foundation.lazy.items
 import com.yandex.mapkit.search.Response
 import com.yandex.mapkit.search.SearchOptions
 import com.yandex.mapkit.search.Session
 import com.yandex.mapkit.search.ToponymObjectMetadata
 import com.yandex.runtime.Error
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import svaga.taho.data.remote.CreateOrderRequest
 import svaga.taho.service.TahoSseService
@@ -108,9 +102,9 @@ fun DriverHomeScreen(navController: NavController) {
 
 
     // СОСТОЯНИЯ
-    var routePolyline by remember { mutableStateOf<PolylineMapObject?>(null) }
-    var driverMarker by remember { mutableStateOf<PlacemarkMapObject?>(null) }
-    var mapObjects by remember { mutableStateOf<MapObjectCollection?>(null) }
+   // var routePolyline by remember { mutableStateOf<PolylineMapObject?>(null) }
+  //  var driverMarker by remember { mutableStateOf<PlacemarkMapObject?>(null) }
+  //  var mapObjects by remember { mutableStateOf<MapObjectCollection?>(null) }
     var driverName by remember { mutableStateOf("Загрузка...") }
     var driverStatus by remember { mutableStateOf("OFFLINE") }
     var showStatusSheet by remember { mutableStateOf(false) }
@@ -131,7 +125,7 @@ fun DriverHomeScreen(navController: NavController) {
     var parkName by remember { mutableStateOf<String?>(null) }
 
     var showTimeToArriveDialog by remember { mutableStateOf(false) }
-    var pendingOrder by remember { mutableStateOf<DriverOrder?>(null) }
+   //var pendingOrder by remember { mutableStateOf<DriverOrder?>(null) }
 
     val zaezdCount by driverViewModel.zaezdCount.collectAsState()
     var showZaezdConfirmDialog by remember { mutableStateOf(false) }
@@ -139,8 +133,8 @@ fun DriverHomeScreen(navController: NavController) {
 
     // Выбор точки на карте
     // var selectingPoint by remember { mutableStateOf<String?>(null) } // "from", "to" или null
-    var fromPlacemark  by remember { mutableStateOf<PlacemarkMapObject?>(null) }
-    var toPlacemark    by remember { mutableStateOf<PlacemarkMapObject?>(null) }
+  //  var fromPlacemark  by remember { mutableStateOf<PlacemarkMapObject?>(null) }
+   // var toPlacemark    by remember { mutableStateOf<PlacemarkMapObject?>(null) }
     val mapViewState   = remember { mutableStateOf<MapView?>(null) }
     var selectingPointMode by remember { mutableStateOf<String?>(null) } // "from", "to" или null
     var createFromPlacemark by remember { mutableStateOf<PlacemarkMapObject?>(null) }
@@ -271,7 +265,7 @@ fun DriverHomeScreen(navController: NavController) {
  */
     /**
      * Открывает Яндекс.Карты с маршрутом до нужной точки.
-     * [point] — строка в формате "lat,lon" (как хранится в DriverOrder)
+     *[point] — строка в формате "lat,lon" (как хранится в DriverOrder)
      * [label] — подпись точки назначения в приложении
      */
     @RequiresApi(Build.VERSION_CODES.DONUT)
@@ -603,7 +597,6 @@ fun DriverHomeScreen(navController: NavController) {
         }
     }
 
-    // Функция загрузки профиля
 
     // ФУНКЦИЯ ДЛЯ ПРИНЯТИЯ ЗАКАЗА
     val acceptOrder: (String) -> Unit = { timeToArrive ->
@@ -857,7 +850,6 @@ fun DriverHomeScreen(navController: NavController) {
                                     Button(
                                         onClick = {
                                             stopNotificationSound()
-                                            pendingOrder = order
                                             showTimeToArriveDialog = true
                                         },
                                         colors = ButtonDefaults.buttonColors(containerColor = Color.White),
@@ -1032,7 +1024,6 @@ fun DriverHomeScreen(navController: NavController) {
                                                     fontSize = 16.adaptiveSp()
                                                 )
                                             }
-                                            else -> {}
                                         }
 
                                         Spacer(Modifier.height(5.adaptiveDp()))
@@ -1522,7 +1513,7 @@ fun DriverHomeScreen(navController: NavController) {
 }
 
 // Анимация машины
-private fun animateDriver(
+/*private fun animateDriver(
     start: Point,
     points: List<Point>,
     mapObjects: MapObjectCollection?,
@@ -1550,4 +1541,4 @@ private fun buildRoute(
     onReady: (List<Point>) -> Unit
 ) {
     onReady(listOf(from, to))
-}
+} */

@@ -943,10 +943,10 @@ fun ClientHomeScreen(navController: NavController) {
                             val isOutside = calculatedPrice == 404.0   // именно то значение, которое возвращает бэкенд при Outside
                                 //рассчет цены с доп опциями
                             val optionsPrice = (if (hasPet) 50 else 0) + (if (hasLoad) 50 else 0)
-                            calculatedPrice?.let { price ->
+                          /*  calculatedPrice?.let { price ->
                                 val total = price + optionsPrice
 
-                            }
+                            }*/
 
                             Card(
                                 colors = CardDefaults.cardColors(

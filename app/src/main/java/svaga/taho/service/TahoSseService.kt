@@ -41,7 +41,7 @@ private var isShuttingDown = false
 class TahoSseService : Service() {
 
     @Inject lateinit var tokenManager: TokenManager
-    @Inject lateinit var sseEventBus: SseEventBus  // ← добавь это
+    @Inject lateinit var sseEventBus: SseEventBus
 
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
