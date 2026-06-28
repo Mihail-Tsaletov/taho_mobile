@@ -8,6 +8,7 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 import java.math.BigDecimal
@@ -101,6 +102,12 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Body request: Map<String, String>
     ): Response<Map<String, Any>>
+
+    @PUT("api/orders/setPriceBetweenDistricts")
+    suspend fun setPriceBetweenDistricts(
+        @Header("Authorization") token: String,
+        @Body request: Map<String, String>
+    ): Response<Unit>
 
 
 }

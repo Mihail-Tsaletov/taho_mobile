@@ -140,10 +140,12 @@ fun DriverHomeScreen(navController: NavController) {
     var createFromPlacemark by remember { mutableStateOf<PlacemarkMapObject?>(null) }
     var createToPlacemark by remember { mutableStateOf<PlacemarkMapObject?>(null) }
     val createMapObjects = remember { mutableStateOf<MapObjectCollection?>(null) }
-
     val searchManager = remember {
         SearchFactory.getInstance().createSearchManager(SearchManagerType.COMBINED)
     }
+
+    var showSetPriceDialog by remember { mutableStateOf(false) }
+    var setPriceOrderId by remember { mutableStateOf<String?>(null) }
 
     suspend fun getAddressFromPoint(point: Point): String = suspendCancellableCoroutine { cont ->
         val session = searchManager.submit(point, 16, SearchOptions(), object : Session.SearchListener {
@@ -326,6 +328,8 @@ fun DriverHomeScreen(navController: NavController) {
     LaunchedEffect(Unit) {
         sseEventBus.events.collect { json ->
             val myPos = json.optInt("myPosition", -1)
+            Log.d(TAG, "RAW JSON цена: '${json.optString("price")}'")
+
             if (myPos >= 0) {
                 queuePosition = myPos
                 Log.d(TAG, "Позиция в очереди: $myPos")
@@ -426,7 +430,13 @@ fun DriverHomeScreen(navController: NavController) {
                 driverViewModel.resetOrderStates()
                 driverViewModel.setCurrentOrder(order)
                 driverViewModel.setShouldTrack(!order.inCity)
-
+                val price = json.optString("price").takeIf { it.isNotBlank() && it != "null" }
+                Log.d(TAG, "Цена из SSE: '$price'")
+                if (price == "505" || price == "505.0") {
+                    Log.d(TAG, "Цена 505 — показываем диалог установки тарифа")
+                    setPriceOrderId = order.id
+                    showSetPriceDialog = true
+                }
                 playRepeatingNotificationSound(context)
                 Log.d(TAG, "✅ НОВЫЙ ЗАКАЗ УСТАНОВЛЕН В VIEWMODEL")
             }
@@ -850,7 +860,11 @@ fun DriverHomeScreen(navController: NavController) {
                                     Button(
                                         onClick = {
                                             stopNotificationSound()
-                                            showTimeToArriveDialog = true
+                                            if (showSetPriceDialog) {
+                                                // диалог цены уже открыт — ничего не делаем
+                                            } else {
+                                                showTimeToArriveDialog = true
+                                            }
                                         },
                                         colors = ButtonDefaults.buttonColors(containerColor = Color.White),
                                         modifier = Modifier.weight(1f)
@@ -1494,6 +1508,35 @@ fun DriverHomeScreen(navController: NavController) {
                             TextButton(onClick = { showCompleteConfirmDialog = false }) {
                                 Text("Отмена", color = Color.Gray)
                             }
+                        }
+                    )
+                }
+                if (showSetPriceDialog && setPriceOrderId != null) {
+                    SetPriceDialog(
+                        orderId = setPriceOrderId!!,
+                        onConfirm = { price ->
+                            scope.launch {
+                                try {
+                                    apiService.setPriceBetweenDistricts(
+                                        "Bearer $token",
+                                        mapOf(
+                                            "orderId" to setPriceOrderId!!,
+                                            "price" to price.toString()
+                                        )
+                                    )
+                                    showSetPriceDialog = false
+                                    setPriceOrderId = null
+                                    // ← После установки цены открываем диалог времени
+                                    showTimeToArriveDialog = true
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Ошибка установки цены", e)
+                                    Toast.makeText(context, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onDismiss = {
+                            showSetPriceDialog = false
+                            setPriceOrderId = null
                         }
                     )
                 }
