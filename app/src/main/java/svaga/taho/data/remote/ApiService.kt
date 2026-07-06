@@ -110,6 +110,11 @@ interface ApiService {
     ): Response<Unit>
 
 
+    @POST("api/users/standRepair")
+    suspend fun standRepair(
+        @Header("Authorization") token: String
+    ): Response<Unit>
+
 }
 
 

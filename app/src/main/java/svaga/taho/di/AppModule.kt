@@ -17,6 +17,7 @@ import svaga.taho.TahoApplication
 import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.ApiService
 import svaga.taho.util.BuildConfig
+import svaga.taho.util.RepairTimerManager
 import svaga.taho.util.SseClient
 import svaga.taho.util.SseEventBus
 import svaga.taho.util.WaitingTimerManager
@@ -39,7 +40,9 @@ object AppModule {
             .build()
             .create(ApiService::class.java)
     }
-
+    @Provides
+    @Singleton
+    fun provideRepairTimerManager(): RepairTimerManager = RepairTimerManager()
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface ApiProvider {
@@ -49,6 +52,8 @@ object AppModule {
         fun sseClient(): SseClient
         fun waitingTimerManager(): WaitingTimerManager
         fun sseEventBus(): SseEventBus
+        fun repairTimerManager(): RepairTimerManager
+
     }
 
     @Provides

@@ -69,6 +69,7 @@ import svaga.taho.util.playRepeatingNotificationSound
 import svaga.taho.util.stopNotificationSound
 import kotlin.coroutines.resume
 import androidx.compose.material.icons.filled.Close
+import svaga.taho.util.RepairTimerManager
 
 
 private const val TAG = "DriverHomeScreen"
@@ -146,6 +147,13 @@ fun DriverHomeScreen(navController: NavController) {
 
     var showSetPriceDialog by remember { mutableStateOf(false) }
     var setPriceOrderId by remember { mutableStateOf<String?>(null) }
+
+    val repairTimerManager = remember {
+        EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            AppModule.ApiProvider::class.java
+        ).repairTimerManager()
+    }
 
     suspend fun getAddressFromPoint(point: Point): String = suspendCancellableCoroutine { cont ->
         val session = searchManager.submit(point, 16, SearchOptions(), object : Session.SearchListener {
@@ -651,6 +659,7 @@ fun DriverHomeScreen(navController: NavController) {
             )
 
             if (response.isSuccessful) {
+
                 val newStatus = response.body()?.string()?.trim()
                 if (newStatus != null) {
                     driverStatus = newStatus
@@ -661,6 +670,7 @@ fun DriverHomeScreen(navController: NavController) {
                         parkName = null
                         TahoSseService.stop(context)  // ← останавливаем сервис
                     } else {
+                        repairTimerManager.reset()
                         // Вышел на линию — запускаем сервис для получения новых заказов
                         TahoSseService.start(context, orderId = "driver", role = "DRIVER")
                     }
@@ -689,7 +699,8 @@ fun DriverHomeScreen(navController: NavController) {
                 authViewModel = authViewModel,
                 name = userName ?: "Имя не указано",
                 phone = userPhone ?: "Номера нема",
-                onCloseDrawer = { scope.launch { drawerState.close() } }
+                onCloseDrawer = { scope.launch { drawerState.close() } },
+                onRepairStarted = { scope.launch { loadDriverProfile() } }
             )
         }
     ) {
