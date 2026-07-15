@@ -16,8 +16,8 @@ android {
         applicationId = "svaga.taho"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -55,7 +55,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation(libs.androidx.compose.remote.creation.core)
-    debugImplementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:5.0.0-alpha.14")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
