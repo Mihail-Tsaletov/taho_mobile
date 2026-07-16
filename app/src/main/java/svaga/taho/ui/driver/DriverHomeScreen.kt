@@ -235,7 +235,7 @@ fun DriverHomeScreen(navController: NavController) {
     val (statusColor, statusText, statusClickable) = when (driverStatus) {
         "AVAILABLE" -> {
             val color = when (parkName) {           // или profile.parkId, если удобнее
-                "Черема" -> Color(0xFF2196F3)       // Синий для parkId = 1
+                "Черемушки" -> Color(0xFF2196F3)       // Синий для parkId = 1
                 "Город"  -> Color(0xFF4CAF50)       // Зелёный для parkId = 2
                 else     -> Color(0xFF4CAF50)       // по умолчанию зелёный
             }
@@ -857,10 +857,10 @@ fun DriverHomeScreen(navController: NavController) {
                                 Text("Куда: ${order.endAddress}", color = Color.White)
                                 Log.d(TAG, "Цена за поездку ==== ${order.price}")
                                 Text(
-                                    text = if (order.price.isNullOrBlank() || order.price == "null") {
-                                        "Цена: по таксометру"
-                                    } else {
-                                        "Цена: ${order.price} ₽"
+                                    text = when {
+                                        order.price.isNullOrBlank() || order.price == "null" -> "Цена: по таксометру"
+                                        order.price == "505.0" -> "Цена будет определена при назначении водителя"          // или другая специальная надпись
+                                        else -> "Цена: ${order.price} ₽"
                                     },
                                     color = Color.White,
                                     fontSize = 20.adaptiveSp(),

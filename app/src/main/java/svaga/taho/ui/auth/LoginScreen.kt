@@ -47,6 +47,11 @@ fun LoginScreen(
     val isFormValid = validateLoginPhone(phoneDigits) == null &&
             validateLoginPassword(password) == null
 
+    // ── Антиспам: cooldown после превышения лимита попыток ──────
+    val loginCooldownSeconds by viewModel.loginCooldownSeconds.collectAsState()
+    val isLoginBlocked = loginCooldownSeconds > 0
+    // ──────────────────────────────────────────────────────────
+
     LaunchedEffect(Unit) {
         viewModel.event.collectLatest { event ->
             when (event) {
@@ -89,23 +94,23 @@ fun LoginScreen(
             onValueChange = { phoneDigits = it },
             label = { Text("Телефон") },
             modifier = Modifier.fillMaxWidth()
-         )
+        )
 
         // ── Телефон ──────────────────────────────────────────────
-     /*   OutlinedTextField(
-            value = phoneDigits,
-            onValueChange = { input ->
-                phoneDigits = input.filter { it.isDigit() }.take(10)
-            },
-            label = { Text("Телефон") },
-            placeholder = { Text("+7 (___) ___-__-__") },
-            //9954visualTransformation = PhoneVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-            isError = phoneError != null,
-            supportingText = phoneError?.let { { Text(it) } },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        ) */
+        /*   OutlinedTextField(
+               value = phoneDigits,
+               onValueChange = { input ->
+                   phoneDigits = input.filter { it.isDigit() }.take(10)
+               },
+               label = { Text("Телефон") },
+               placeholder = { Text("+7 (___) ___-__-__") },
+               //9954visualTransformation = PhoneVisualTransformation(),
+               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+               isError = phoneError != null,
+               supportingText = phoneError?.let { { Text(it) } },
+               modifier = Modifier.fillMaxWidth(),
+               singleLine = true
+           ) */
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -114,7 +119,7 @@ fun LoginScreen(
             value = password,
             onValueChange = { password = it.take(50) },
             label = { Text("Пароль") },
-           visualTransformation = PasswordVisualTransformation(),
+            visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             isError = passwordError != null,
             supportingText = passwordError?.let { { Text(it) } },
@@ -135,20 +140,20 @@ fun LoginScreen(
                 submitted = true
                 error = null
                 Log.d("LOGIN", "Отправляем номер: $phoneDigits")
-               // if (isFormValid) {
-                    viewModel.login( phoneDigits, password)   //TODO Здесь потом заменить "+7$phoneDigits"
-              //  }
+                // if (isFormValid) {
+                viewModel.login( phoneDigits, password)   //TODO Здесь потом заменить "+7$phoneDigits"
+                //  }
             },
-            enabled = !loading,
+            enabled = !loading && !isLoginBlocked,
             modifier = Modifier.fillMaxWidth()
         ) {
-            if (loading) {
-                CircularProgressIndicator(
+            when {
+                loading -> CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
                     color = LocalContentColor.current
                 )
-            } else {
-                Text("Войти")
+                isLoginBlocked -> Text("Повторите через $loginCooldownSeconds сек")
+                else -> Text("Войти")
             }
         }
 

@@ -65,6 +65,11 @@ fun RegisterScreen(
             validateFullName(fullName) == null &&
             validatePassword(password) == null
 
+    // ── Антиспам: cooldown после превышения лимита попыток ──────
+    val registerCooldownSeconds by viewModel.registerCooldownSeconds.collectAsState()
+    val isRegisterBlocked = registerCooldownSeconds > 0
+    // ──────────────────────────────────────────────────────────
+
     LaunchedEffect(Unit) {
         viewModel.event.collectLatest { event ->
             when (event) {
@@ -168,14 +173,17 @@ fun RegisterScreen(
                     viewModel.register("+7$phoneDigits", fullName.trim(), password)
                 }
             },
-            enabled = !loading,
+            enabled = !loading && !isRegisterBlocked,
             modifier = Modifier.fillMaxWidth()
         ) {
-            if (loading) CircularProgressIndicator(
-                modifier = Modifier.size(20.dp),
-                color = LocalContentColor.current
-            )
-            else Text("Зарегистрироваться")
+            when {
+                loading -> CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = LocalContentColor.current
+                )
+                isRegisterBlocked -> Text("Повторите через $registerCooldownSeconds сек")
+                else -> Text("Зарегистрироваться")
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))

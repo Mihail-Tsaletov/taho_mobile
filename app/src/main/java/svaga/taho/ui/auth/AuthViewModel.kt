@@ -4,6 +4,8 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +22,45 @@ import javax.inject.Inject
 
 
 private const val TAG = "AuthViewModel"
+
+// ── Антиспам: простой rate-limiter, N попыток за окно времени, потом блок ──
+private class RateLimiter(
+    private val maxAttempts: Int,
+    private val windowMs: Long,
+    private val blockDurationMs: Long
+) {
+    private var attemptCount = 0
+    private var windowStartedAt = 0L
+    private var blockedUntil = 0L
+
+    // true — попытка разрешена (и засчитана), false — заблокировано
+    fun tryAttempt(): Boolean {
+        val now = System.currentTimeMillis()
+
+        if (now < blockedUntil) return false
+
+        if (now - windowStartedAt > windowMs) {
+            windowStartedAt = now
+            attemptCount = 0
+        }
+
+        attemptCount++
+
+        if (attemptCount > maxAttempts) {
+            blockedUntil = now + blockDurationMs
+            return false
+        }
+
+        return true
+    }
+
+    fun secondsLeftBlocked(): Int {
+        val left = blockedUntil - System.currentTimeMillis()
+        return if (left > 0) ((left + 999) / 1000).toInt() else 0
+    }
+
+    fun isBlocked(): Boolean = System.currentTimeMillis() < blockedUntil
+}
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
@@ -43,6 +84,47 @@ class AuthViewModel @Inject constructor(
 
     private val _verificationCode = MutableStateFlow("")           // ← важно!
     val verificationCode: StateFlow<String> = _verificationCode.asStateFlow()
+
+    private var loginAttempts = 0
+    private var lastAttemptTime = 0L
+
+    // ── Антиспам: лимитеры и cooldown для UI ────────────────────────
+    // 5 попыток входа за 60 секунд, блок на 30 секунд
+    private val loginLimiter = RateLimiter(maxAttempts = 5, windowMs = 60_000L, blockDurationMs = 30_000L)
+    // 3 попытки регистрации за 2 минуты, блок на 60 секунд
+    private val registerLimiter = RateLimiter(maxAttempts = 3, windowMs = 120_000L, blockDurationMs = 60_000L)
+
+    private val _loginCooldownSeconds = MutableStateFlow(0)
+    val loginCooldownSeconds: StateFlow<Int> = _loginCooldownSeconds.asStateFlow()
+
+    private val _registerCooldownSeconds = MutableStateFlow(0)
+    val registerCooldownSeconds: StateFlow<Int> = _registerCooldownSeconds.asStateFlow()
+
+    private var loginCooldownTickerJob: Job? = null
+    private var registerCooldownTickerJob: Job? = null
+
+    private fun startLoginCooldownTicker() {
+        loginCooldownTickerJob?.cancel()
+        loginCooldownTickerJob = viewModelScope.launch {
+            while (loginLimiter.isBlocked()) {
+                _loginCooldownSeconds.value = loginLimiter.secondsLeftBlocked()
+                delay(1000)
+            }
+            _loginCooldownSeconds.value = 0
+        }
+    }
+
+    private fun startRegisterCooldownTicker() {
+        registerCooldownTickerJob?.cancel()
+        registerCooldownTickerJob = viewModelScope.launch {
+            while (registerLimiter.isBlocked()) {
+                _registerCooldownSeconds.value = registerLimiter.secondsLeftBlocked()
+                delay(1000)
+            }
+            _registerCooldownSeconds.value = 0
+        }
+    }
+    // ──────────────────────────────────────────────────────────────
 
 
     sealed class AuthEvent {
@@ -96,12 +178,18 @@ class AuthViewModel @Inject constructor(
         code: String
     ) {
         viewModelScope.launch {
+            if (!registerLimiter.tryAttempt()) {
+                startRegisterCooldownTicker()
+                _event.emit(AuthEvent.Error("Слишком много попыток регистрации. Повторите через ${registerLimiter.secondsLeftBlocked()} сек."))
+                return@launch
+            }
+
             _event.emit(AuthEvent.Loading)
             try {
                 val response = api.register(
                     RegisterRequest(
                         phone = phone,
-                       // code = code,
+                        // code = code,
                         name = name,
                         password = password,
                         role = "CLIENT"
@@ -127,6 +215,12 @@ class AuthViewModel @Inject constructor(
 
     fun register(phone: String, name: String, password: String) {
         viewModelScope.launch {
+            if (!registerLimiter.tryAttempt()) {
+                startRegisterCooldownTicker()
+                _event.emit(AuthEvent.Error("Слишком много попыток регистрации. Повторите через ${registerLimiter.secondsLeftBlocked()} сек."))
+                return@launch
+            }
+
             _event.emit(AuthEvent.Loading)
             try {
                 api.register(
@@ -159,6 +253,12 @@ class AuthViewModel @Inject constructor(
 
     fun login(phone: String, password: String) {
         viewModelScope.launch {
+            if (!loginLimiter.tryAttempt()) {
+                startLoginCooldownTicker()
+                _event.emit(AuthEvent.Error("Слишком много попыток входа. Повторите через ${loginLimiter.secondsLeftBlocked()} сек."))
+                return@launch
+            }
+
             _event.emit(AuthEvent.Loading)
             try {
                 Log.d(TAG, "phone: $phone, password: $password")
