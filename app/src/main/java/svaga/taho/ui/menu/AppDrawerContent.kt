@@ -41,6 +41,7 @@ import androidx.navigation.NavController
 import svaga.taho.ui.auth.AuthViewModel
 import androidx.core.net.toUri
 import svaga.taho.ui.client.ClientViewModel
+import svaga.taho.ui.navigation.Screen
 
 @Composable
 fun AppDrawerContent(
@@ -140,6 +141,21 @@ fun AppDrawerContent(
             modifier = Modifier.clickable {
                 onCloseDrawer()
                 // Здесь можно показать диалог или тост
+            }
+        )
+        ListItem(
+            headlineContent = { Text("Политика конфиденциальности") },
+            modifier = Modifier.clickable {
+                onCloseDrawer()
+                navController.navigate(Screen.Document.route("privacy_policy"))
+            }
+        )
+
+        ListItem(
+            headlineContent = { Text("Условия пользования") },
+            modifier = Modifier.clickable {
+                onCloseDrawer()
+                navController.navigate(Screen.Document.route("terms_of_use"))
             }
         )
     }

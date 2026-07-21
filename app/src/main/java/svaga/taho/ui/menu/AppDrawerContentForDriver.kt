@@ -195,6 +195,22 @@ fun AppDrawerContentForDriver(
                 if (repairState is RepairState.Idle) showRepairConfirm = true
             }
         )
+
+        ListItem(
+            headlineContent = { Text("Политика конфиденциальности") },
+            modifier = Modifier.clickable {
+                onCloseDrawer()
+                navController.navigate(Screen.Document.route("privacy_policy"))
+            }
+        )
+
+        ListItem(
+            headlineContent = { Text("Условия пользования") },
+            modifier = Modifier.clickable {
+                onCloseDrawer()
+                navController.navigate(Screen.Document.route("terms_of_use"))
+            }
+        )
     }
 
     // Диалоговые окна подтверждения

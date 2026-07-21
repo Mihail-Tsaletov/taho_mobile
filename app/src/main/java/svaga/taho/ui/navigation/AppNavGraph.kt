@@ -15,6 +15,7 @@ import svaga.taho.ui.auth.RoleSelectionScreen
 import svaga.taho.ui.client.ClientHomeScreen
 import svaga.taho.ui.driver.DriverHomeScreen
 import svaga.taho.ui.driver.StatisticsScreen
+import svaga.taho.ui.components.DocumentScreen
 
 import javax.inject.Inject
 
@@ -45,5 +46,10 @@ fun AppNavGraph(navController: NavHostController) {
         composable(Screen.ClientHome.route) { ClientHomeScreen(navController) }
         composable(Screen.DriverHome.route) { DriverHomeScreen(navController) }
         composable(Screen.Statistics.route) { StatisticsScreen(navController = navController) }
+        composable("document/{type}") { backStackEntry ->
+            val type = backStackEntry.arguments?.getString("type") ?: "privacy_policy"
+            DocumentScreen(navController = navController, documentType = type)
+        }
     }
+
 }

@@ -1,17 +1,24 @@
 package svaga.taho.ui.auth
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.*
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import kotlinx.coroutines.flow.collectLatest
+import svaga.taho.ui.navigation.Screen
 import svaga.taho.util.ui.PhoneVisualTransformation
 
 
@@ -60,14 +67,18 @@ fun RegisterScreen(
     val phoneError    = if (submitted) validatePhone(phoneDigits) else null
     val fullNameError = if (submitted) validateFullName(fullName) else null
     val passwordError = if (submitted) validatePassword(password) else null
+    var agreedToTerms by remember { mutableStateOf(false) }
+
 
     val isFormValid = validatePhone(phoneDigits) == null &&
             validateFullName(fullName) == null &&
-            validatePassword(password) == null
+            validatePassword(password) == null &&
+            agreedToTerms
 
     // ── Антиспам: cooldown после превышения лимита попыток ──────
     val registerCooldownSeconds by viewModel.registerCooldownSeconds.collectAsState()
     val isRegisterBlocked = registerCooldownSeconds > 0
+
     // ──────────────────────────────────────────────────────────
 
     LaunchedEffect(Unit) {
@@ -157,6 +168,71 @@ fun RegisterScreen(
         )
 
         Spacer(modifier = Modifier.height(24.dp))
+
+        // ── Чекбокс согласия ─────────────────────────────────────
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Checkbox(
+                checked = agreedToTerms,
+                onCheckedChange = { agreedToTerms = it }
+            )
+
+            val annotated = buildAnnotatedString {
+                append("Я прочитал и согласен с ")
+
+                pushStringAnnotation(tag = "privacy", annotation = "privacy_policy")
+                withStyle(
+                    SpanStyle(
+                        color = MaterialTheme.colorScheme.primary,
+                        textDecoration = TextDecoration.Underline
+                    )
+                ) {
+                    append("Политикой конфиденциальности")
+                }
+                pop()
+
+                append(" и ")
+
+                pushStringAnnotation(tag = "terms", annotation = "terms_of_use")
+                withStyle(SpanStyle(
+                    color = MaterialTheme.colorScheme.primary,
+                    textDecoration = TextDecoration.Underline
+                )) {
+                    append("Условиями пользования")
+                }
+                pop()
+            }
+
+            ClickableText(
+                text = annotated,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurface
+                ),
+                onClick = { offset ->
+                    annotated.getStringAnnotations("privacy", offset, offset)
+                        .firstOrNull()?.let {
+                            navController.navigate(Screen.Document.route("privacy_policy"))
+                        }
+                    annotated.getStringAnnotations("terms", offset, offset)
+                        .firstOrNull()?.let {
+                            navController.navigate(Screen.Document.route("terms_of_use"))
+                        }
+                }
+            )
+        }
+
+        if (submitted && !agreedToTerms) {
+            Text(
+                "Необходимо принять условия",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
 
         // Общая ошибка от сервера
         if (error != null) {

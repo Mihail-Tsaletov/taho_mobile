@@ -8,4 +8,8 @@ sealed class Screen(val route: String) {
     object DriverHome : Screen("driver_home")
 
     object Statistics : Screen("statistics")
+
+    object Document : Screen("document/{type}") {
+        fun route(type: String) = "document/$type"
+    }
 }
