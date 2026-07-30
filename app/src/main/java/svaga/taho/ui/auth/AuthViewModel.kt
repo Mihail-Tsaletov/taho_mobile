@@ -17,6 +17,8 @@ import svaga.taho.data.local.TokenManager
 import svaga.taho.data.remote.ApiService
 import svaga.taho.data.remote.LoginRequest
 import svaga.taho.data.remote.RegisterRequest
+import svaga.taho.data.remote.SendCodeRequest
+import svaga.taho.data.remote.VerifyCodeRequest
 import svaga.taho.util.parseJwtRole
 import javax.inject.Inject
 
@@ -79,6 +81,10 @@ class AuthViewModel @Inject constructor(
     private val _verificationPhone = MutableStateFlow<String?>(null)
     val verificationPhone: StateFlow<String?> = _verificationPhone.asStateFlow()
 
+    private val _phoneVerification = MutableStateFlow<PhoneVerificationState>(PhoneVerificationState.Idle)
+    val phoneVerification: StateFlow<PhoneVerificationState> = _phoneVerification.asStateFlow()
+
+
     private val _isCodeVerified = MutableStateFlow(false)
     val isCodeVerified: StateFlow<Boolean> = _isCodeVerified.asStateFlow()
 
@@ -126,6 +132,12 @@ class AuthViewModel @Inject constructor(
     }
     // ──────────────────────────────────────────────────────────────
 
+    sealed class PhoneVerificationState {
+        object Idle : PhoneVerificationState()
+        object CodeSent : PhoneVerificationState()
+        object Verified : PhoneVerificationState()
+        data class Error(val message: String) : PhoneVerificationState()
+    }
 
     sealed class AuthEvent {
         object ToRegister : AuthEvent()
@@ -214,6 +226,10 @@ class AuthViewModel @Inject constructor(
     }
 
     fun register(phone: String, name: String, password: String) {
+        if (_phoneVerification.value !is PhoneVerificationState.Verified) {
+            viewModelScope.launch { _event.emit(AuthEvent.Error("Сначала подтвердите номер телефона")) }
+            return
+        }
         viewModelScope.launch {
             if (!registerLimiter.tryAttempt()) {
                 startRegisterCooldownTicker()
@@ -249,6 +265,36 @@ class AuthViewModel @Inject constructor(
                 _event.emit(AuthEvent.Error("Что-то пошло не так"))
             }
         }
+    }
+
+    fun sendCode(phone: String) {
+        viewModelScope.launch {
+            try {
+                api.sendCode(SendCodeRequest(phone))
+                _phoneVerification.value = PhoneVerificationState.CodeSent
+            } catch (e: Exception) {
+                _phoneVerification.value = PhoneVerificationState.Error(e.message ?: "Не удалось отправить код")
+            }
+        }
+    }
+
+    fun verifyCode(phone: String, code: String) {
+        viewModelScope.launch {
+            try {
+                val response = api.verifyCode(VerifyCodeRequest(phone, code))
+                if (response.isSuccessful) {
+                    _phoneVerification.value = PhoneVerificationState.Verified
+                } else {
+                    _phoneVerification.value = PhoneVerificationState.Error("Неверный код")
+                }
+            } catch (e: Exception) {
+                _phoneVerification.value = PhoneVerificationState.Error(e.message ?: "Ошибка проверки кода")
+            }
+        }
+    }
+
+    fun resetPhoneVerification() {
+        _phoneVerification.value = PhoneVerificationState.Idle
     }
 
     fun login(phone: String, password: String) {

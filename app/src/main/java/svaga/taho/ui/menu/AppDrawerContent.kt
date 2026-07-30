@@ -56,6 +56,7 @@ fun AppDrawerContent(
 
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showRoleChangeConfirm by remember { mutableStateOf(false) }
+    var showAboutDialog by remember { mutableStateOf(false) }
     val clientViewModel: ClientViewModel = hiltViewModel()
 
 
@@ -139,23 +140,7 @@ fun AppDrawerContent(
         ListItem(
             headlineContent = { Text("О приложении") },
             modifier = Modifier.clickable {
-                onCloseDrawer()
-                // Здесь можно показать диалог или тост
-            }
-        )
-        ListItem(
-            headlineContent = { Text("Политика конфиденциальности") },
-            modifier = Modifier.clickable {
-                onCloseDrawer()
-                navController.navigate(Screen.Document.route("privacy_policy"))
-            }
-        )
-
-        ListItem(
-            headlineContent = { Text("Условия пользования") },
-            modifier = Modifier.clickable {
-                onCloseDrawer()
-                navController.navigate(Screen.Document.route("terms_of_use"))
+                showAboutDialog = true
             }
         )
     }
@@ -194,6 +179,36 @@ fun AppDrawerContent(
             },
             dismissButton = {
                 TextButton(onClick = { showRoleChangeConfirm = false }) { Text("Нет") }
+            }
+        )
+    }
+
+    if (showAboutDialog) {
+        AlertDialog(
+            onDismissRequest = { showAboutDialog = false },
+            title = { Text("О приложении") },
+            text = {
+                Column {
+                    ListItem(
+                        headlineContent = { Text("Политика конфиденциальности") },
+                        modifier = Modifier.clickable {
+                            showAboutDialog = false
+                            onCloseDrawer()
+                            navController.navigate(Screen.Document.route("privacy_policy"))
+                        }
+                    )
+                    ListItem(
+                        headlineContent = { Text("Условия пользования") },
+                        modifier = Modifier.clickable {
+                            showAboutDialog = false
+                            onCloseDrawer()
+                            navController.navigate(Screen.Document.route("terms_of_use"))
+                        }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAboutDialog = false }) { Text("Закрыть") }
             }
         )
     }

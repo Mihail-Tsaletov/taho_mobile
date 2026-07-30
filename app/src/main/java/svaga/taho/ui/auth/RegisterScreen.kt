@@ -60,6 +60,9 @@ fun RegisterScreen(
     var password    by remember { mutableStateOf("") }
     var loading     by remember { mutableStateOf(false) }
     var error       by remember { mutableStateOf<String?>(null) }
+    var smsCode by remember { mutableStateOf("") }
+    val phoneVerification by viewModel.phoneVerification.collectAsState()
+    val isPhoneVerified = phoneVerification is AuthViewModel.PhoneVerificationState.Verified
 
     // Показываем ошибки полей только после первой попытки отправки
     var submitted by remember { mutableStateOf(false) }
@@ -68,9 +71,12 @@ fun RegisterScreen(
     val fullNameError = if (submitted) validateFullName(fullName) else null
     val passwordError = if (submitted) validatePassword(password) else null
     var agreedToTerms by remember { mutableStateOf(false) }
+    val showCodeInput = phoneVerification is AuthViewModel.PhoneVerificationState.CodeSent ||
+            phoneVerification is AuthViewModel.PhoneVerificationState.Error
 
 
-    val isFormValid = validatePhone(phoneDigits) == null &&
+    val isFormValid = isPhoneVerified &&
+            validatePhone(phoneDigits) == null &&
             validateFullName(fullName) == null &&
             validatePassword(password) == null &&
             agreedToTerms
@@ -123,6 +129,7 @@ fun RegisterScreen(
             value = phoneDigits,
             onValueChange = { input ->
                 phoneDigits = input.filter { it.isDigit() }.take(10)
+                if (isPhoneVerified) viewModel.resetPhoneVerification()
             },
             label = { Text("Телефон") },
             placeholder = { Text("+7 (___) ___-__-__") },
@@ -223,6 +230,51 @@ fun RegisterScreen(
             )
         }
 
+        if (!isPhoneVerified) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = { viewModel.sendCode("+7$phoneDigits") },
+                enabled = validatePhone(phoneDigits) == null,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    if (phoneVerification is AuthViewModel.PhoneVerificationState.CodeSent ||
+                        phoneVerification is AuthViewModel.PhoneVerificationState.Error
+                    ) "Отправить код повторно" else "Получить код"
+                )
+            }
+
+            if (showCodeInput) {
+                OutlinedTextField(
+                    value = smsCode,
+                    onValueChange = { smsCode = it.filter { c -> c.isDigit() }.take(6) },
+                    label = { Text("Код из СМС") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = phoneVerification is AuthViewModel.PhoneVerificationState.Error,
+                    supportingText = {
+                        if (phoneVerification is AuthViewModel.PhoneVerificationState.Error) {
+                            Text((phoneVerification as AuthViewModel.PhoneVerificationState.Error).message)
+                        }
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { viewModel.verifyCode("+7$phoneDigits", smsCode) },
+                    enabled = smsCode.length >= 4,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Подтвердить")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        } else {
+            Text("✓ Номер подтверждён", color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         if (submitted && !agreedToTerms) {
             Text(
                 "Необходимо принять условия",
@@ -230,8 +282,6 @@ fun RegisterScreen(
                 style = MaterialTheme.typography.bodySmall
             )
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
 
 
         // Общая ошибка от сервера
@@ -249,7 +299,7 @@ fun RegisterScreen(
                     viewModel.register("+7$phoneDigits", fullName.trim(), password)
                 }
             },
-            enabled = !loading && !isRegisterBlocked,
+            enabled = !loading && !isRegisterBlocked && isFormValid,
             modifier = Modifier.fillMaxWidth()
         ) {
             when {

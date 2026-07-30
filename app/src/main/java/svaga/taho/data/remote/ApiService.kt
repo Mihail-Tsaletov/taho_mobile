@@ -68,6 +68,12 @@ interface ApiService {
     @POST("api/orders/{id}/pickedUp")
     suspend fun driverPickedUp(@Header("Authorization") token: String, @Path("id") orderId: String): Response<ResponseBody>
 
+    @POST("api/auth/send-code")
+    suspend fun sendCode(@Body request: SendCodeRequest): Response<ResponseBody>
+
+    @POST("api/auth/verify-code")
+    suspend fun verifyCode(@Body request: VerifyCodeRequest): Response<ResponseBody>
+
     @GET("api/users/getUser")
     suspend fun getUserProfile(
         @Header("Authorization") token: String
@@ -130,6 +136,8 @@ data class OrderWeb(
         get() = LocalDateTime.parse(orderTime, DateTimeFormatter.ISO_DATE_TIME)
 }
 
+data class SendCodeRequest(val phone: String)
+data class VerifyCodeRequest(val phone: String, val code: String)
 
 data class CreateOrderRequest(
     val startPoint: String,
