@@ -2,20 +2,27 @@ package svaga.taho.ui.menu
 
 import android.content.Intent
 import android.util.Log
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -37,20 +44,95 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathIterator
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import svaga.taho.ui.auth.AuthViewModel
 import androidx.core.net.toUri
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.launch
+import svaga.taho.R
 import svaga.taho.data.local.TokenManager
 import svaga.taho.di.AppModule
 import svaga.taho.ui.navigation.Screen
 import svaga.taho.util.RepairState
 
+private val AccentColor = Color(0xFF6C5CE7)
+private val AccentBg = Color(0xFFF0EDFB)
+
+// ── Базовый пункт меню с произвольным контентом ────────────────
+@Composable
+private fun DrawerMenuItem(
+    @DrawableRes icon: Int,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (isPressed) AccentBg else Color.Transparent)
+            .clickable(
+                enabled = enabled,
+                interactionSource = interactionSource,
+                indication = null, // убираем стандартный ripple, у нас свой эффект
+                onClick = onClick
+            )
+            .padding(vertical = 12.dp, horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(24.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(if (isPressed) AccentColor else Color.Transparent)
+        )
+
+        Spacer(Modifier.width(12.dp))
+
+        Icon(
+            painter = painterResource(id = icon),
+            contentDescription = null,
+            tint = if (isPressed) AccentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(24.dp)
+        )
+
+        Spacer(Modifier.width(16.dp))
+
+        content()
+    }
+}
+
+// ── Пункт меню с текстовой меткой ───────────────────────────────
+@Composable
+public fun DrawerMenuItem(
+    @DrawableRes icon: Int,
+    label: String,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    DrawerMenuItem(icon = icon, onClick = onClick) {
+        Text(
+            text = label,
+            fontSize = 17.sp,
+            fontWeight = if (isPressed) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (isPressed) AccentColor else MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
 @Composable
 fun AppDrawerContentForDriver(
     navController: NavController,
@@ -88,120 +170,134 @@ fun AppDrawerContentForDriver(
     Column(
         modifier = Modifier
             .fillMaxHeight()
-            .width(280.dp)
+            .width(300.dp)
             .background(MaterialTheme.colorScheme.surface)
             .padding(16.dp)
     ) {
-        // Верхняя панель с кнопкой закрытия (справа)
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 16.dp, vertical = 20.dp)
         ) {
-
-            Text("TahoTaxi", style = MaterialTheme.typography.titleMedium)
-
-            Spacer(Modifier.weight(1f)) // толкает кнопку вправо
-
-            // Кнопка закрытия — круглая со стрелкой назад
-            IconButton(
-                onClick = onCloseDrawer,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Закрыть меню",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+
+                Spacer(Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = phone,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Кнопка закрытия
+                IconButton(
+                    onClick = onCloseDrawer,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Закрыть меню",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
 
-        // Header with name and phone
-        Text(
-            text = name,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = phone,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+        HorizontalDivider(modifier = Modifier.padding(vertical = 15.dp))
 
-        // История заказов
-        ListItem(
-            headlineContent = { Text("Статистика") },
-            modifier = Modifier.clickable {
+        DrawerMenuItem(
+            icon = R.drawable.outline_bar_chart_4_bars_24,
+            label = "Статистика",
+            onClick = {
                 onCloseDrawer()
                 navController.navigate(Screen.Statistics.route)
             }
         )
 
-        // Связаться с оператором
-        ListItem(
-            headlineContent = { Text("Связаться с оператором") },
-            modifier = Modifier.clickable {
+        Spacer(Modifier.height(4.dp))
+
+        DrawerMenuItem(
+            icon = R.drawable.outline_contact_support_24,
+            label = "Связаться с оператором",
+            onClick = {
                 onCloseDrawer()
-                val intent = Intent(Intent.ACTION_DIAL, "tel:+79495895834".toUri()) // Замените на реальный номер
+                val intent = Intent(Intent.ACTION_DIAL, "tel:+71234567890".toUri())
                 context.startActivity(intent)
             }
         )
 
-        // Смена роли
-        ListItem(
-            headlineContent = { Text("Смена роли") },
-            modifier = Modifier.clickable {
-                showRoleChangeConfirm = true
-            }
+        Spacer(Modifier.height(4.dp))
+
+        DrawerMenuItem(
+            icon = R.drawable.outline_person_24,
+            label = "Смена роли",
+            onClick = { showRoleChangeConfirm = true }
         )
 
-        // Выйти из аккаунта
-        ListItem(
-            headlineContent = { Text("Выйти из аккаунта") },
-            modifier = Modifier.clickable {
-                showLogoutConfirm = true
-            }
+        Spacer(Modifier.height(4.dp))
+
+        DrawerMenuItem(
+            icon = R.drawable.outline_logout_24,
+            label = "Выйти из аккаунта",
+            onClick = { showLogoutConfirm = true }
         )
 
-        // О приложении
-        ListItem(
-            headlineContent = { Text("О приложении") },
-            modifier = Modifier.clickable {
-                // Пока ничего, можно добавить диалог или тост
-                onCloseDrawer()
-            }
-        )
+        Spacer(Modifier.height(4.dp))
 
-        ListItem(
-            headlineContent = {
-                when (val rs = repairState) {
-                    is RepairState.Idle -> Text("Уйти на отдых")
-                    is RepairState.OnRepair -> {
-                        val hours = rs.secondsLeft / 3600
-                        val mins = (rs.secondsLeft % 3600) / 60
-                        val secs = rs.secondsLeft % 60
-                        Text("Отдых: %02d:%02d:%02d".format(hours, mins, secs),
-                            color = Color(0xFFFF9800))
-                    }
-                    is RepairState.Expired -> Text("Отдых завершён", color = Color.Red)
-                }
-            },
-            modifier = Modifier.clickable {
+        HorizontalDivider(modifier = Modifier.padding(vertical = 15.dp))
+
+
+        DrawerMenuItem(
+            icon = R.drawable.outline_parking_sign_24,
+            enabled = repairState is RepairState.Idle,
+            onClick = {
                 if (repairState is RepairState.Idle) showRepairConfirm = true
             }
-        )
-
-        ListItem(
-            headlineContent = { Text("О приложении") },
-            modifier = Modifier.clickable {
-                showAboutDialog = true
+        ) {
+            when (val rs = repairState) {
+                is RepairState.Idle -> Text(
+                    text = "Уйти на отдых",
+                    fontSize = 17.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                is RepairState.OnRepair -> {
+                    val hours = rs.secondsLeft / 3600
+                    val mins = (rs.secondsLeft % 3600) / 60
+                    val secs = rs.secondsLeft % 60
+                    Text(
+                        text = "Отдых: %02d:%02d:%02d".format(hours, mins, secs),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFFF9800)
+                    )
+                }
+                is RepairState.Expired -> Text(
+                    text = "Отдых завершён",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.Red
+                )
             }
+        }
+
+        DrawerMenuItem(
+            icon = R.drawable.outline_info_24,
+            label = "О приложении",
+            onClick = {
+                showAboutDialog = true}
         )
     }
 

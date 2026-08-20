@@ -65,6 +65,8 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
     implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
+    implementation("androidx.compose.material:material-icons-extended:1.7.x")
+
 
     // Navigation
     implementation(libs.androidx.navigation.compose)

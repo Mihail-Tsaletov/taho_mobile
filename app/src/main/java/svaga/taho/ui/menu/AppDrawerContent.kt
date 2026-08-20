@@ -2,18 +2,22 @@ package svaga.taho.ui.menu
 
 import android.content.Intent
 import android.net.Uri
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
@@ -33,15 +37,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import svaga.taho.ui.auth.AuthViewModel
 import androidx.core.net.toUri
+import svaga.taho.R
 import svaga.taho.ui.client.ClientViewModel
+import svaga.taho.ui.menu.DrawerMenuItem
 import svaga.taho.ui.navigation.Screen
+
 
 @Composable
 fun AppDrawerContent(
@@ -63,89 +72,95 @@ fun AppDrawerContent(
     Column(
         modifier = Modifier
             .fillMaxHeight()
-            .width(280.dp)
+            .width(300.dp)
             .background(MaterialTheme.colorScheme.surface)
             .padding(16.dp)
     ) {
-        // Верхняя панель с кнопкой закрытия (справа)
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 16.dp, vertical = 20.dp)
         ) {
-
-
-            Spacer(Modifier.weight(1f)) // толкает кнопку вправо
-
-            // Кнопка закрытия — круглая со стрелкой назад
-            IconButton(
-                onClick = onCloseDrawer,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Закрыть меню",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+
+                Spacer(Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = phone,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Кнопка закрытия
+                IconButton(
+                    onClick = onCloseDrawer,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Закрыть меню",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
 
-        // Header with name and phone
-        Text(
-            text = name,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = phone,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+        HorizontalDivider(modifier = Modifier.padding(vertical = 15.dp))
 
-        // Связаться с оператором
-        ListItem(
-            headlineContent = { Text("Связаться с оператором") },
-            modifier = Modifier.clickable {
+
+        Spacer(Modifier.height(4.dp))
+
+        DrawerMenuItem(
+            icon = R.drawable.outline_contact_support_24,
+            label = "Связаться с оператором",
+            onClick = {
                 onCloseDrawer()
-                val intent = Intent(Intent.ACTION_DIAL, "tel:+79495895834".toUri())
+                val intent = Intent(Intent.ACTION_DIAL, "tel:+71234567890".toUri())
                 context.startActivity(intent)
             }
         )
 
-        // Смена роли
-        if (role == "DRIVER") {
-            ListItem(
-                headlineContent = { Text("Смена роли") },
-                modifier = Modifier.clickable {
-                    showRoleChangeConfirm = true
-                }
-            )
-        }
+        Spacer(Modifier.height(4.dp))
 
-        // Выйти из аккаунта
-        ListItem(
-            headlineContent = { Text("Выйти из аккаунта") },
-            modifier = Modifier.clickable {
-                showLogoutConfirm = true
-            }
+        DrawerMenuItem(
+            icon = R.drawable.outline_person_24,
+            label = "Смена роли",
+            onClick = { showRoleChangeConfirm = true }
         )
 
-        // О приложении
-        ListItem(
-            headlineContent = { Text("О приложении") },
-            modifier = Modifier.clickable {
-                showAboutDialog = true
-            }
-        )
-    }
+        Spacer(Modifier.height(4.dp))
 
-    // Диалоговые окна подтверждения
+        DrawerMenuItem(
+            icon = R.drawable.outline_logout_24,
+            label = "Выйти из аккаунта",
+            onClick = { showLogoutConfirm = true }
+        )
+
+        Spacer(Modifier.height(4.dp))
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 15.dp))
+
+        DrawerMenuItem(
+            icon = R.drawable.outline_info_24,
+            label = "О приложении",
+            onClick = {
+                showAboutDialog = true}
+        )
+
+        // Диалоговые окна подтверждения
     if (showLogoutConfirm) {
         AlertDialog(
             onDismissRequest = { showLogoutConfirm = false },
@@ -212,4 +227,5 @@ fun AppDrawerContent(
             }
         )
     }
+}
 }

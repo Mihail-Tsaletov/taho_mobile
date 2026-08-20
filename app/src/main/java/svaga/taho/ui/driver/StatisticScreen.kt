@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
+import svaga.taho.util.ui.rememberDebouncedClick
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -36,13 +37,14 @@ fun StatisticsScreen(navController: NavController) {
     val state by viewModel.state.collectAsState()
     val pagerState = rememberPagerState(pageCount = { 2 })
     val scope = rememberCoroutineScope()
+    val onClose = rememberDebouncedClick { navController.popBackStack() }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Статистика") },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(onClick = onClose) {
                         Icon(Icons.Default.Close, contentDescription = "Закрыть")
                     }
                 }
