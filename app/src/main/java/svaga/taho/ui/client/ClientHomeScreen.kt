@@ -858,7 +858,7 @@ fun ClientHomeScreen(navController: NavController) {
                                         selectingPointMode = "from"
                                         focusManager.clearFocus()
                                     }) {
-                                        Icon(Icons.Default.LocationOn, contentDescription = "Выбрать на карте", tint = Color(0xFF1E88E5))
+                                        Icon(Icons.Default.LocationOn, contentDescription = "Выбрать на карте", tint = Color(0xFF6C5CE7))
                                     }
                                 }
                             )
@@ -908,7 +908,7 @@ fun ClientHomeScreen(navController: NavController) {
                                         selectingPointMode = "to"
                                         focusManager.clearFocus()
                                     }) {
-                                        Icon(Icons.Default.LocationOn, contentDescription = "Выбрать на карте", tint = Color(0xFF1E88E5))
+                                        Icon(Icons.Default.LocationOn, contentDescription = "Выбрать на карте", tint = Color(0xFF6C5CE7))
                                     }
                                 }
                             )
@@ -989,11 +989,11 @@ fun ClientHomeScreen(navController: NavController) {
                             onClick = { showExtraOptions = true },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = if (hasPet || hasLoad) Color(0xFF1E88E5) else Color.Gray
+                                contentColor = if (hasPet || hasLoad) Color(0xFF6C5CE7) else Color.Gray
                             ),
                             border = BorderStroke(
                                 1.dp,
-                                if (hasPet || hasLoad) Color(0xFF1E88E5) else Color.LightGray
+                                if (hasPet || hasLoad) Color(0xFF6C5CE7) else Color.LightGray
                             )
                         ) {
                             Icon(
@@ -1158,7 +1158,7 @@ fun ClientHomeScreen(navController: NavController) {
                         Button(
                             onClick = { showExtraOptions = false },
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C5CE7))
                         ) {
                             Text("Готово", color = Color.White, fontWeight = FontWeight.Bold)
                         }
