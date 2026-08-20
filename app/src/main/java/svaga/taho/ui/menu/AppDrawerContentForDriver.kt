@@ -88,7 +88,7 @@ private fun DrawerMenuItem(
                 indication = null, // убираем стандартный ripple, у нас свой эффект
                 onClick = onClick
             )
-            .padding(vertical = 12.dp, horizontal = 12.dp),
+            .padding(vertical = 12.dp, horizontal = 1.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(

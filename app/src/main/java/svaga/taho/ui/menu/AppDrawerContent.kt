@@ -134,12 +134,14 @@ fun AppDrawerContent(
         )
 
         Spacer(Modifier.height(4.dp))
+        if (role == "DRIVER") {
+            DrawerMenuItem(
+                icon = R.drawable.outline_person_24,
+                label = "Смена роли",
+                onClick = { showRoleChangeConfirm = true }
+            )
+        }
 
-        DrawerMenuItem(
-            icon = R.drawable.outline_person_24,
-            label = "Смена роли",
-            onClick = { showRoleChangeConfirm = true }
-        )
 
         Spacer(Modifier.height(4.dp))
 
