@@ -11,6 +11,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhoneIphone
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import kotlinx.coroutines.flow.collectLatest
+import svaga.taho.util.ui.PhoneVisualTransformation
 
 // ── Цвета для нового дизайна ────────────────────────────────────────
 private val BgTop = Color(0xFFF7EEFC)
@@ -42,6 +44,8 @@ private val AccentPurple = Color(0xFF6E3ADB)
 private val AccentPurpleDark = Color(0xFF5B2FC2)
 private val FieldBg = Color(0xFFFFFFFF)
 private val PlaceholderGray = Color(0xFFB2A8BE)
+
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +58,8 @@ fun LoginScreen(
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var passwordVisible by remember { mutableStateOf(false) }
+    var phoneDigits by remember { mutableStateOf("") }
+
 
     LaunchedEffect(Unit) {
         viewModel.event.collectLatest { event ->
@@ -146,14 +152,15 @@ fun LoginScreen(
 
             // ── Поле "Номер телефона" ──────────────────────────────
             OutlinedTextField(
-                value = phone,
-                onValueChange = { phone = it },
-                placeholder = { Text("Номер телефона", color = PlaceholderGray) },
+                value = phoneDigits,
+                onValueChange = { input -> phoneDigits = input.filter { it.isDigit() }.take(10) },
+                placeholder = { Text("+7 (___) ___-__-__", color = PlaceholderGray) },
                 leadingIcon = {
-                    Icon(Icons.Default.PhoneIphone, contentDescription = null, tint = AccentPurple)
+                    Icon(Icons.Default.Phone, contentDescription = null, tint = AccentPurple)
                 },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                visualTransformation = PhoneVisualTransformation(),
                 shape = RoundedCornerShape(20.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = FieldBg,
@@ -219,7 +226,7 @@ fun LoginScreen(
                         enabled = !loading,
                         interactionSource = buttonInteractionSource,
                         indication = LocalIndication.current
-                    ) { viewModel.login(phone, password) },
+                    ) { viewModel.login("+7$phoneDigits", password) },
                 contentAlignment = Alignment.Center
             ) {
                 if (loading) {

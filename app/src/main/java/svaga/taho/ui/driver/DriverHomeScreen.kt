@@ -440,7 +440,7 @@ fun DriverHomeScreen(navController: NavController) {
                 driverViewModel.setShouldTrack(!order.inCity)
                 val price = json.optString("price").takeIf { it.isNotBlank() && it != "null" }
                 Log.d(TAG, "Цена из SSE: '$price'")
-                if (price == "505" || price == "505.0") {
+                if (price == "505" || price == "505.0" ) {
                     Log.d(TAG, "Цена 505 — показываем диалог установки тарифа")
                     setPriceOrderId = order.id
                     showSetPriceDialog = true
@@ -858,8 +858,9 @@ fun DriverHomeScreen(navController: NavController) {
                                 Log.d(TAG, "Цена за поездку ==== ${order.price}")
                                 Text(
                                     text = when {
-                                        order.price.isNullOrBlank() || order.price == "null" -> "Цена: по таксометру"
-                                        order.price == "505.0" -> "Цена будет определена при назначении водителя"          // или другая специальная надпись
+                                        order.price.isNullOrBlank() || order.price == "404" -> "Цена: по таксометру"
+                                        order.price == "505.0" -> "Цена будет определена при назначении водителя"
+                                        order.price == "505" -> "Цена будет определена при назначении водителя"       // или другая специальная надпись
                                         else -> "Цена: ${order.price} ₽"
                                     },
                                     color = Color.White,
