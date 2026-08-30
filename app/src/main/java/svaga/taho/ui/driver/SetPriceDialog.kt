@@ -11,6 +11,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 
 @Composable
 fun SetPriceDialog(
@@ -25,6 +26,10 @@ fun SetPriceDialog(
     if (!showConfirmation) {
         AlertDialog(
             onDismissRequest = onDismiss,
+            properties = DialogProperties(
+                dismissOnClickOutside = false,
+                dismissOnBackPress = true
+            ),
             title = {
                 Text(
                     "Новый маршрут",
@@ -68,6 +73,10 @@ fun SetPriceDialog(
     } else {
         AlertDialog(
             onDismissRequest = { showConfirmation = false },
+            properties = DialogProperties(
+                dismissOnClickOutside = false,
+                dismissOnBackPress = true
+            ),
             title = {
                 Text("Подтвердите тариф", fontWeight = FontWeight.Bold)
             },
