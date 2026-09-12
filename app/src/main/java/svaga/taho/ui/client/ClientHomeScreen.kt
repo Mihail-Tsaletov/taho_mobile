@@ -938,19 +938,18 @@ fun ClientHomeScreen(navController: NavController) {
 
                         Spacer(Modifier.height(6.adaptiveDp()))
 
-                        // ← Блок с предварительной ценой
                         if (calculatedPrice != null) {
                             val isOutside = calculatedPrice == 404.0   // именно то значение, которое возвращает бэкенд при Outside
-                                //рассчет цены с доп опциями
+                            val isNotSetPrice = calculatedPrice == 505.0
                             val optionsPrice = (if (hasPet) 50 else 0) + (if (hasLoad) 50 else 0)
-                          /*  calculatedPrice?.let { price ->
-                                val total = price + optionsPrice
-
-                            }*/
 
                             Card(
                                 colors = CardDefaults.cardColors(
-                                    containerColor = if (isOutside) Color(0xFFFFF3E0) else Color(0xFFE8F5E9)
+                                    containerColor = when {
+                                        isOutside -> Color(0xFFFFF3E0)
+                                        isNotSetPrice -> Color(0xFFE3F2FD)
+                                        else -> Color(0xFFE8F5E9)
+                                    }
                                 ),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -959,27 +958,32 @@ fun ClientHomeScreen(navController: NavController) {
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        if (isOutside) "Цена по таксометру" else "Предварительная цена:",
+                                        when {
+                                            isOutside -> "Цена по таксометру"
+                                            isNotSetPrice -> "Цена будет назначена во время поездки"
+                                            else -> "Предварительная цена:"
+                                        },
                                         fontSize = 14.adaptiveSp(),
                                         fontWeight = FontWeight.Medium,
-                                        color = if (isOutside) Color(0xFFEF6C00) else Color.Unspecified
+                                        color = when {
+                                            isOutside -> Color(0xFFEF6C00)
+                                            isNotSetPrice -> Color(0xFF1565C0)
+                                            else -> Color.Unspecified
+                                        }
                                     )
                                     Spacer(Modifier.weight(1f))
 
-                                    if (!isOutside) {
+                                    if (!isOutside && !isNotSetPrice) {
                                         Text(
-                                            text = if (optionsPrice > 0){
-                                                "${calculatedPrice!!.toInt()} ₽(+ $optionsPrice)₽"}
-                                            else {
+                                            text = if (optionsPrice > 0) {
+                                                "${calculatedPrice!!.toInt()} ₽(+ $optionsPrice)₽"
+                                            } else {
                                                 "${calculatedPrice!!.toInt()} ₽"
                                             },
-
                                             fontSize = 22.adaptiveSp(),
                                             fontWeight = FontWeight.Bold,
                                             color = Color(0xFF2E7D32)
-
                                         )
-
                                     }
                                 }
                             }
@@ -1005,7 +1009,7 @@ fun ClientHomeScreen(navController: NavController) {
                             Text(
                                 text = if (hasPet || hasLoad) {
                                     buildString {
-                                        if (hasPet) append("Животное")
+                                        if (hasPet) append("Питомец")
                                         if (hasPet && hasLoad) append(" · ")
                                         if (hasLoad) append("Груз")
                                     }
@@ -1115,7 +1119,7 @@ fun ClientHomeScreen(navController: NavController) {
                             )
                             Spacer(Modifier.width(8.dp))
                             Column {
-                                Text("Животное", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                                Text("Питомец", fontSize = 16.sp, fontWeight = FontWeight.Medium)
                                 Text(
                                     "Перевозка домашних питомцев",
                                     fontSize = 13.sp,
