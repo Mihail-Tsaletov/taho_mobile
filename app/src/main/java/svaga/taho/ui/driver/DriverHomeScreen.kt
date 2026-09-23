@@ -705,22 +705,28 @@ fun DriverHomeScreen(navController: NavController) {
         }
     ) {
         Scaffold(
+            containerColor = Color.Transparent,
             topBar = {
                 TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent
+                    ),
                     title = { },
                     navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                        IconButton(
+                            onClick = { scope.launch { drawerState.open() } },
+                            modifier = Modifier
+                                .padding(start = 4.dp)
+                                .background(Color.White.copy(alpha = 0.9f), CircleShape)
+                        ) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu")
                         }
                     }
                 )
             }
         ) { paddingValues ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-            ) {
+            Box(modifier = Modifier.fillMaxSize()) {
                 AndroidView(
                     factory = { ctx ->
                         MapView(ctx).apply {
@@ -736,6 +742,8 @@ fun DriverHomeScreen(navController: NavController) {
                         MapKitFactory.getInstance().onStart()
                     }
                 )
+                // Карта рисуется на весь экран (под статус-баром и шапкой), остальной UI — с отступами Scaffold
+                Box(Modifier.fillMaxSize().padding(paddingValues)) {
 
                 Box(
                     modifier = Modifier
@@ -1552,6 +1560,7 @@ fun DriverHomeScreen(navController: NavController) {
                         }
                     )
                 }
+            }
             }
         }
     }
