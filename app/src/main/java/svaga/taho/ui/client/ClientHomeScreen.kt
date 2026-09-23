@@ -468,7 +468,9 @@ fun ClientHomeScreen(navController: NavController) {
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = false,
+        // Жесты включены только при открытом меню: тап по затемнению или свайп закрывают его,
+        // а в закрытом состоянии свайпы не мешают двигать карту
+        gesturesEnabled = drawerState.isOpen,
         drawerContent = {
             AppDrawerContent(
                 navController = navController,
@@ -482,26 +484,7 @@ fun ClientHomeScreen(navController: NavController) {
         modifier = Modifier.fillMaxSize().background(Color(0xFFF8FAFC))
     ) {
         Scaffold(
-            containerColor = Color.Transparent,
-            topBar = {
-                TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                        scrolledContainerColor = Color.Transparent
-                    ),
-                    title = {},
-                    navigationIcon = {
-                        IconButton(
-                            onClick = { scope.launch { drawerState.open() } },
-                            modifier = Modifier
-                                .padding(start = 4.dp)
-                                .background(Color.White.copy(alpha = 0.9f), CircleShape)
-                        ) {
-                            Icon(Icons.Default.Menu, contentDescription = "Меню")
-                        }
-                    }
-                )
-            }
+            containerColor = Color.Transparent
         ) { padding ->
             Box(Modifier.fillMaxSize()) {
                 AndroidView(
@@ -536,11 +519,23 @@ fun ClientHomeScreen(navController: NavController) {
                     }
                 }
 
-               CallOperatorButton(
+                // Кнопки меню и звонка оператору — одного размера, ровно друг под другом
+                Column(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(16.adaptiveDp())
-                )
+                        .padding(16.adaptiveDp()),
+                    verticalArrangement = Arrangement.spacedBy(12.adaptiveDp())
+                ) {
+                    FloatingActionButton(
+                        onClick = { scope.launch { drawerState.open() } },
+                        containerColor = Color.White,
+                        contentColor = Color.Black,
+                        shape = CircleShape
+                    ) {
+                        Icon(Icons.Default.Menu, contentDescription = "Меню")
+                    }
+                    CallOperatorButton()
+                }
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
