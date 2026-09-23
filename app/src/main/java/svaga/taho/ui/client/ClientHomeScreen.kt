@@ -32,6 +32,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import android.util.Log
 import com.yandex.mapkit.map.PlacemarkMapObject
+import com.yandex.mapkit.map.IconStyle
+import com.yandex.runtime.image.ImageProvider
+import android.graphics.PointF
+import svaga.taho.R
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import androidx.core.content.ContextCompat
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
@@ -56,6 +63,18 @@ import kotlin.coroutines.resume
 import androidx.core.net.toUri
 
 private const val TAG = "ClientHomeScreen"
+
+/** Растеризует векторный drawable в Bitmap — MapKit не умеет брать vector-иконки напрямую. */
+private fun bitmapFromVector(context: android.content.Context, resId: Int): Bitmap {
+    val drawable = ContextCompat.getDrawable(context, resId)!!
+    val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 96
+    val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 96
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    drawable.setBounds(0, 0, canvas.width, canvas.height)
+    drawable.draw(canvas)
+    return bitmap
+}
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -113,6 +132,10 @@ fun ClientHomeScreen(navController: NavController) {
    // var selectingPoint by remember { mutableStateOf<String?>(null) } // "from", "to" или null
     var fromPlacemark  by remember { mutableStateOf<PlacemarkMapObject?>(null) }
     var toPlacemark    by remember { mutableStateOf<PlacemarkMapObject?>(null) }
+    // [0] — текущий масштаб флажка; храним в массиве, чтобы менять без рекомпозиции
+    val flagScale = remember { floatArrayOf(0.8f) }
+    val fromFlagImage = remember { ImageProvider.fromBitmap(bitmapFromVector(context, R.drawable.ic_flag_from)) }
+    val toFlagImage = remember { ImageProvider.fromBitmap(bitmapFromVector(context, R.drawable.ic_flag_to)) }
     val mapViewState   = remember { mutableStateOf<MapView?>(null) }
     var selectingPointMode by remember { mutableStateOf<String?>(null) }
 
@@ -398,18 +421,29 @@ fun ClientHomeScreen(navController: NavController) {
     }
 
     // Обновление метки (placemark) на карте
+    // Кончик древка флажка указывает точно на выбранную точку; scale задаётся снаружи
+    fun flagIconStyle(scale: Float) = IconStyle().apply {
+        anchor = PointF(0.26f, 0.96f)
+        this.scale = scale
+        zIndex = 10f
+    }
+
     fun updatePlacemark(type: String, point: Point) {
         val mapObjects = mapViewState.value?.mapWindow?.map?.mapObjects ?: return
         when (type) {
             "from" -> {
                 fromPlacemark?.let { mapObjects.remove(it) }
-                fromPlacemark = mapObjects.addPlacemark(point)
-                // fromPlacemark?.setIcon(...) — можно добавить свою иконку
+                fromPlacemark = mapObjects.addPlacemark(point).apply {
+                    setIcon(fromFlagImage)
+                    setIconStyle(flagIconStyle(flagScale[0]))
+                }
             }
             "to" -> {
                 toPlacemark?.let { mapObjects.remove(it) }
-                toPlacemark = mapObjects.addPlacemark(point)
-                // toPlacemark?.setIcon(...) — можно добавить свою иконку
+                toPlacemark = mapObjects.addPlacemark(point).apply {
+                    setIcon(toFlagImage)
+                    setIconStyle(flagIconStyle(flagScale[0]))
+                }
             }
         }
     }
@@ -453,10 +487,26 @@ fun ClientHomeScreen(navController: NavController) {
         }
     }
 
+    // Масштаб флажка зависит от зума (чем ближе — тем крупнее), но жёстко ограничен
+    // сверху и снизу, чтобы флажок нельзя было растянуть на весь экран.
+    fun scaleForZoom(zoom: Float): Float = (zoom / 15f).coerceIn(0.5f, 1.6f)
+
+    val mapCameraListener = remember {
+        CameraListener { _, cameraPosition, _, _ ->
+            val s = scaleForZoom(cameraPosition.zoom)
+            if (kotlin.math.abs(s - flagScale[0]) > 0.01f) {
+                flagScale[0] = s
+                fromPlacemark?.setIconStyle(flagIconStyle(s))
+                toPlacemark?.setIconStyle(flagIconStyle(s))
+            }
+        }
+    }
+
     DisposableEffect(Unit) {
         MapKitFactory.initialize(context)
         onDispose {
             mapViewState.value?.mapWindow?.map?.removeInputListener(mapInputListener)
+            mapViewState.value?.mapWindow?.map?.removeCameraListener(mapCameraListener)
             mapViewState.value?.onStop()
             MapKitFactory.getInstance().onStop()
         }
@@ -492,6 +542,7 @@ fun ClientHomeScreen(navController: NavController) {
                         MapView(ctx).apply {
                             mapWindow.map.move(CameraPosition(Point(48.0397, 38.7697), 12f, 0f, 0f))
                             mapWindow.map.addInputListener(mapInputListener)
+                            mapWindow.map.addCameraListener(mapCameraListener)
                         }.also { mapViewState.value = it }
                     },
                     modifier = Modifier.fillMaxSize(),

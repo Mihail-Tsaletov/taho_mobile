@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+
+    <!-- тень под основанием -->
+    <path
+        android:fillColor="#33000000"
+        android:pathData="M12.5,45 m-4,0 a4,1.6 0 1,0 8,0 a4,1.6 0 1,0 -8,0 Z" />
+
+    <!-- древко -->
+    <path
+        android:fillColor="#4E342E"
+        android:pathData="M11,4 L13.5,4 L13.5,45 L11,45 Z" />
+
+    <!-- полотнище (зелёное, «откуда») -->
+    <path
+        android:fillColor="#2E7D32"
+        android:strokeColor="#1B5E20"
+        android:strokeWidth="0.5"
+        android:pathData="M13.5,5 C21,2 29,8 37,5 L37,19 C29,22 21,16 13.5,19 Z" />
+</vector>

@@ -226,7 +226,7 @@ fun LoginScreen(
                         enabled = !loading,
                         interactionSource = buttonInteractionSource,
                         indication = LocalIndication.current
-                    ) { viewModel.login("+7$phoneDigits", password) },
+                    ) { viewModel.login("+7$phoneDigits",password) },
                 contentAlignment = Alignment.Center
             ) {
                 if (loading) {
