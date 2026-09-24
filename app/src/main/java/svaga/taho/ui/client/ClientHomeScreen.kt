@@ -29,9 +29,12 @@ import com.yandex.mapkit.search.*
 import com.yandex.mapkit.geometry.BoundingBox
 import com.yandex.runtime.Error
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import android.util.Log
 import com.yandex.mapkit.map.PlacemarkMapObject
+import com.yandex.mapkit.geometry.Polyline
 import com.yandex.mapkit.map.IconStyle
 import com.yandex.runtime.image.ImageProvider
 import android.graphics.PointF
@@ -75,6 +78,57 @@ private fun bitmapFromVector(context: android.content.Context, resId: Int): Bitm
     drawable.draw(canvas)
     return bitmap
 }
+
+// Базовые адреса OSRM. SELF — твой сервер (поднимешь OSRM позже, перевыкладывать
+// приложение не нужно: как только адрес заработает, маршруты пойдут отсюда).
+private const val OSRM_SELF = "https://snezhtaho.ru/osrm"
+private const val OSRM_DEMO = "https://router.project-osrm.org"
+
+/** Один запрос маршрута к конкретному OSRM. null — сервер не ответил корректно (нужен fallback). */
+private suspend fun osrmRequest(base: String, from: Point, to: Point): List<Point>? =
+    withContext(Dispatchers.IO) {
+        val url = "$base/route/v1/driving/" +
+                "${from.longitude},${from.latitude};${to.longitude},${to.latitude}" +
+                "?overview=full&geometries=geojson"
+        var conn: java.net.HttpURLConnection? = null
+        try {
+            conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                connectTimeout = 8_000
+                readTimeout = 8_000
+                requestMethod = "GET"
+                instanceFollowRedirects = true
+                setRequestProperty("User-Agent", "taho-android/1.0")
+                setRequestProperty("Accept", "application/json")
+            }
+            val code = conn.responseCode
+            if (code !in 200..299) {
+                Log.w(TAG, "OSRM[$base] HTTP $code")
+                return@withContext null
+            }
+            val body = conn.inputStream.bufferedReader().use { it.readText() }
+            val json = org.json.JSONObject(body)
+            if (json.optString("code") != "Ok") {
+                Log.w(TAG, "OSRM[$base] code=${json.optString("code")}")
+                return@withContext null
+            }
+            val routes = json.optJSONArray("routes") ?: return@withContext null
+            if (routes.length() == 0) return@withContext null
+            val coords = routes.getJSONObject(0)
+                .getJSONObject("geometry")
+                .getJSONArray("coordinates")
+            val result = ArrayList<Point>(coords.length())
+            for (i in 0 until coords.length()) {
+                val c = coords.getJSONArray(i) // GeoJSON: [lon, lat]
+                result.add(Point(c.getDouble(1), c.getDouble(0)))
+            }
+            result
+        } catch (e: Exception) {
+            Log.w(TAG, "OSRM[$base] ${e.javaClass.simpleName}: ${e.message}")
+            null
+        } finally {
+            conn?.disconnect()
+        }
+    }
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -136,6 +190,7 @@ fun ClientHomeScreen(navController: NavController) {
     val flagScale = remember { floatArrayOf(0.8f) }
     val fromFlagImage = remember { ImageProvider.fromBitmap(bitmapFromVector(context, R.drawable.ic_flag_from)) }
     val toFlagImage = remember { ImageProvider.fromBitmap(bitmapFromVector(context, R.drawable.ic_flag_to)) }
+    var routePolyline by remember { mutableStateOf<PolylineMapObject?>(null) }
     val mapViewState   = remember { mutableStateOf<MapView?>(null) }
     var selectingPointMode by remember { mutableStateOf<String?>(null) }
 
@@ -199,6 +254,10 @@ fun ClientHomeScreen(navController: NavController) {
             mapViewState.value?.mapWindow?.map?.mapObjects?.remove(it)
             toPlacemark = null
         }
+        routePolyline?.let {
+            mapViewState.value?.mapWindow?.map?.mapObjects?.remove(it)
+            routePolyline = null
+        }
         activeOrderManager.clear()
     }
 
@@ -248,7 +307,7 @@ fun ClientHomeScreen(navController: NavController) {
     // Запуск SSE только когда есть активный заказ И он ещё не завершён
     // ← ЗАПУСК SSE + УСТАНОВКА НАЧАЛЬНОГО СОСТОЯНИЯ
     // Устанавливаем начальное состояние из загруженного активного заказа
-    LaunchedEffect(activeOrder?.id, token) {
+    LaunchedEffect(activeOrder?.id, activeOrder?.status, token) {
         val order = activeOrder ?: return@LaunchedEffect
 
         Log.d(TAG, "Активный заказ: ID=${order.id}, status=${order.status}")
@@ -271,22 +330,16 @@ fun ClientHomeScreen(navController: NavController) {
 
             }
             "ASSIGNED"              -> clientViewModel.setStatus("Водитель назначен")
-            "COMPLETED"             -> {
-                clientViewModel.onTripCompleted(order.price ?: "По тарифу")
+            "COMPLETED", "CANCELLED", "REJECTED" -> {
+                // Терминальный статус при ВОССТАНОВЛЕНИИ (перезаход/смена роли):
+                // просто очищаем состояние и НЕ показываем повторно диалоги завершения/
+                // отмены — они должны появляться только на живое событие SSE, а не при
+                // перезаходе в уже закрытый заказ.
+                Log.d(TAG, "Восстановление: заказ уже завершён/отменён (${order.status}) → тихая очистка")
                 TahoSseService.stop(context)
                 activeOrderManager.clear()
+                clientViewModel.resetOrderState()
                 resetOrderState()
-                return@LaunchedEffect
-            }
-            "CANCELLED"             -> {
-                TahoSseService.stop(context)
-                clientViewModel.onOrderCancelled()
-                activeOrderManager.clear()
-                return@LaunchedEffect
-            }
-            "REJECTED"              -> {
-                clientViewModel.onOrderRejected()
-                activeOrderManager.clear()
                 return@LaunchedEffect
             }
             else -> clientViewModel.setStatus("В обработке")
@@ -445,6 +498,55 @@ fun ClientHomeScreen(navController: NavController) {
                     setIconStyle(flagIconStyle(flagScale[0]))
                 }
             }
+        }
+    }
+
+    // ─── Маршрут между точками через OSRM (бесплатно, без ключа) ────
+    // Демо-сервер OSRM: годится для разработки/теста. Для прода поднять свой
+    // OSRM (например, на вашем сервере) и заменить BASE_URL.
+    fun clearRoute() {
+        routePolyline?.let { mapViewState.value?.mapWindow?.map?.mapObjects?.remove(it) }
+        routePolyline = null
+    }
+
+    fun drawRoute(points: List<Point>) {
+        val mapObjects = mapViewState.value?.mapWindow?.map?.mapObjects ?: return
+        if (points.size < 2) return
+        routePolyline?.let { mapObjects.remove(it) }
+        routePolyline = mapObjects.addPolyline(Polyline(points)).apply {
+            setStrokeColor(0xFF1E88E5.toInt())
+            strokeWidth = 5f
+            zIndex = 5f
+        }
+    }
+
+    // [0] — последний рабочий OSRM-адрес в этой сессии (чтобы не пробовать свой сервер каждый раз)
+    val osrmBase = remember { arrayOfNulls<String>(1) }
+
+    // Берём маршрут: сперва последний рабочий адрес, иначе по порядку свой сервер → демо.
+    suspend fun fetchRoute(from: Point, to: Point): List<Point> {
+        osrmBase[0]?.let { cached ->
+            osrmRequest(cached, from, to)?.let { return it }
+            osrmBase[0] = null // адрес отвалился — сбросим и переберём заново
+        }
+        for (base in listOf(OSRM_SELF, OSRM_DEMO)) {
+            osrmRequest(base, from, to)?.let {
+                osrmBase[0] = base
+                return it
+            }
+        }
+        return emptyList()
+    }
+
+    // Перестраиваем маршрут, когда заданы обе точки (тап, подсказки, геолокация)
+    LaunchedEffect(fromPoint, toPoint) {
+        val f = fromPoint
+        val t = toPoint
+        if (f != null && t != null) {
+            val pts = fetchRoute(f, t)
+            if (pts.isNotEmpty()) drawRoute(pts) else clearRoute()
+        } else {
+            clearRoute()
         }
     }
 

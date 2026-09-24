@@ -16,6 +16,8 @@ import androidx.compose.ui.window.DialogProperties
 @Composable
 fun SetPriceDialog(
     orderId: String,
+    fromText: String = "",
+    toText: String = "",
     onConfirm: (price: Int) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -38,6 +40,13 @@ fun SetPriceDialog(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (fromText.isNotBlank() || toText.isNotBlank()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("Откуда: $fromText", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color(0xFF2E7D32))
+                            Text("Куда: $toText", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color(0xFFC62828))
+                        }
+                        Spacer(Modifier.height(4.dp))
+                    }
                     Text(
                         "Цена для данного направления ещё не установлена. " +
                                 "Укажите стоимость — она сохранится и будет использоваться автоматически для всех последующих поездок по этому маршруту.",

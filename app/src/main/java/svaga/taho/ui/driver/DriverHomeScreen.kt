@@ -59,6 +59,14 @@ import com.yandex.mapkit.search.SearchOptions
 import com.yandex.mapkit.search.Session
 import com.yandex.mapkit.search.ToponymObjectMetadata
 import com.yandex.runtime.Error
+import com.yandex.runtime.image.ImageProvider
+import com.yandex.mapkit.map.IconStyle
+import com.yandex.mapkit.map.PlacemarkMapObject
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.PointF
+import androidx.core.content.ContextCompat
+import svaga.taho.R
 import kotlinx.coroutines.suspendCancellableCoroutine
 import svaga.taho.data.remote.CreateOrderRequest
 import svaga.taho.service.TahoSseService
@@ -73,6 +81,37 @@ import svaga.taho.util.RepairTimerManager
 
 
 private const val TAG = "DriverHomeScreen"
+
+// Спец-значения цены с сервера (приходят как 505.00 / 404.00 — сравниваем численно):
+//  505 — фиксированной цены между районами нет, цену назначает водитель;
+//  404 — вне зоны, едем по таксометру. Само число 505/404 пользователю показывать нельзя.
+private fun isDriverSetPrice(price: String?): Boolean = price?.trim()?.toDoubleOrNull() == 505.0
+private fun isMeterPrice(price: String?): Boolean = price?.trim()?.toDoubleOrNull() == 404.0
+
+/** Растеризует векторный drawable в Bitmap — MapKit не берёт vector-иконки напрямую. */
+private fun bitmapFromVector(context: android.content.Context, resId: Int): Bitmap {
+    val d = ContextCompat.getDrawable(context, resId)!!
+    val w = if (d.intrinsicWidth > 0) d.intrinsicWidth else 96
+    val h = if (d.intrinsicHeight > 0) d.intrinsicHeight else 96
+    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    d.setBounds(0, 0, c.width, c.height)
+    d.draw(c)
+    return bmp
+}
+
+// Есть ли в адресе улица/дом (иначе это просто город и нужно уточнить точку).
+private fun hasStreet(addr: String?): Boolean {
+    if (addr.isNullOrBlank()) return false
+    val a = addr.lowercase()
+    val keys = listOf("улиц", "ул.", "переул", "пер.", "проспект", "просп", "бульвар",
+        "шоссе", "проезд", "набереж", "площад", "тупик", "квартал", "мкр", "микрорайон")
+    return keys.any { a.contains(it) } || a.any { it.isDigit() }
+}
+
+// Убираем префикс "Россия, " для компактности.
+private fun cleanAddr(addr: String?): String =
+    (addr ?: "").removePrefix("Россия, ").removePrefix("Россия,").trim().ifBlank { "точка на карте" }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -140,6 +179,15 @@ fun DriverHomeScreen(navController: NavController) {
     var selectingPointMode by remember { mutableStateOf<String?>(null) } // "from", "to" или null
     var createFromPlacemark by remember { mutableStateOf<PlacemarkMapObject?>(null) }
     var createToPlacemark by remember { mutableStateOf<PlacemarkMapObject?>(null) }
+    // Флажки текущего заказа (откуда/куда) — чтобы водитель видел заказ до принятия
+    var orderFromPlacemark by remember { mutableStateOf<PlacemarkMapObject?>(null) }
+    var orderToPlacemark by remember { mutableStateOf<PlacemarkMapObject?>(null) }
+    val fromFlagImage = remember { ImageProvider.fromBitmap(bitmapFromVector(context, R.drawable.ic_flag_from)) }
+    val toFlagImage = remember { ImageProvider.fromBitmap(bitmapFromVector(context, R.drawable.ic_flag_to)) }
+    val orderFlagStyle = remember { IconStyle().apply { anchor = PointF(0.26f, 0.96f); scale = 1.0f; zIndex = 8f } }
+    // Тексты адресов для окна назначения цены (с уточнением улицы по точке)
+    var priceFromText by remember { mutableStateOf("") }
+    var priceToText by remember { mutableStateOf("") }
     val createMapObjects = remember { mutableStateOf<MapObjectCollection?>(null) }
     val searchManager = remember {
         SearchFactory.getInstance().createSearchManager(SearchManagerType.COMBINED)
@@ -173,6 +221,14 @@ fun DriverHomeScreen(navController: NavController) {
         cont.invokeOnCancellation { session.cancel() }
     }
 
+
+    // Адрес для окна цены: если в адресе есть улица — используем его; если это просто
+    // город (без улицы) — подтягиваем ближайшую улицу/дом по координате точки.
+    suspend fun resolveAddressForPrice(rawAddress: String?, point: Point): String {
+        if (hasStreet(rawAddress)) return cleanAddr(rawAddress)
+        val geocoded = getAddressFromPoint(point)
+        return if (hasStreet(geocoded)) cleanAddr(geocoded) + " (ближайший)" else cleanAddr(rawAddress)
+    }
 
     fun handleMapTap(point: Point) {
         val mode = selectingPointMode ?: return
@@ -330,6 +386,12 @@ fun DriverHomeScreen(navController: NavController) {
         }
     }
 
+    // Менеджер активного заказа (нужен и в SSE-обработчике ниже — объявляем заранее)
+    val activeOrderManager = remember {
+        EntryPointAccessors.fromApplication(context, AppModule.ApiProvider::class.java)
+            .activeOrderManager()
+    }
+
     // 1. ПОДПИСКА НА НОВЫЕ ЗАКАЗЫ — ВСЕГДА!
     // Читаем новые заказы и обновления из шины — сервис пишет сюда
     // 1. ПОДПИСКА НА НОВЫЕ ЗАКАЗЫ — ВСЕГДА!
@@ -430,6 +492,38 @@ fun DriverHomeScreen(navController: NavController) {
                     Log.e(TAG, "Не удалось распарсить новый заказ")
                     return@collect
                 }
+
+                // Защита от повторного показа окна принятия при перезаходе/смене роли:
+                // при реконнекте сервер переотправляет текущий заказ. Спросим сервер про
+                // реальный активный заказ — если этот заказ уже принят (или дальше по статусу),
+                // восстанавливаем его состояние, а не показываем приём заново.
+                activeOrderManager.loadActiveOrderForDriver()
+                val serverActive = activeOrderManager.activeOrderDriver.value
+                if (serverActive != null && serverActive.id == order.id &&
+                    serverActive.status in listOf("ACCEPTED", "ARRIVED", "PICKED_UP", "IN_PROGRESS")
+                ) {
+                    Log.d(TAG, "Заказ ${order.id} уже принят на сервере (${serverActive.status}) → восстанавливаем, приём не показываем")
+                    stopNotificationSound()
+                    driverViewModel.setCurrentOrder(serverActive)
+                    driverViewModel.setShouldTrack(!serverActive.inCity)
+                    when (serverActive.status) {
+                        "ARRIVED" -> {
+                            driverViewModel.setArrived(true)
+                            driverViewModel.setPickedUp(false)
+                        }
+                        "PICKED_UP", "IN_PROGRESS" -> {
+                            driverViewModel.setArrived(true)
+                            driverViewModel.setPickedUp(true)
+                            driverViewModel.setTracking(!serverActive.inCity)
+                        }
+                        else -> { // ACCEPTED
+                            driverViewModel.setArrived(false)
+                            driverViewModel.setPickedUp(false)
+                        }
+                    }
+                    return@collect
+                }
+
                 realOrderStatus = status
 
                 Log.d(TAG, "Новый заказ успешно распарсен: ${order.id} от ${order.startAddress} → ${order.endAddress}")
@@ -440,11 +534,9 @@ fun DriverHomeScreen(navController: NavController) {
                 driverViewModel.setShouldTrack(!order.inCity)
                 val price = json.optString("price").takeIf { it.isNotBlank() && it != "null" }
                 Log.d(TAG, "Цена из SSE: '$price'")
-                if (price == "505" || price == "505.0" ) {
-                    Log.d(TAG, "Цена 505 — показываем диалог установки тарифа")
-                    setPriceOrderId = order.id
-                    showSetPriceDialog = true
-                }
+                // Окно установки цены для 505-заказа показываем при нажатии «Принять»
+                // (см. кнопку ниже) — так оно работает и когда заказ пришёл по SSE,
+                // и когда восстановлен через активный заказ.
                 playRepeatingNotificationSound(context)
                 Log.d(TAG, "✅ НОВЫЙ ЗАКАЗ УСТАНОВЛЕН В VIEWMODEL")
             }
@@ -452,10 +544,6 @@ fun DriverHomeScreen(navController: NavController) {
     }
 
     // 2. ЗАГРУЗКА АКТИВНОГО ЗАКАЗА
-    val activeOrderManager = remember {
-        EntryPointAccessors.fromApplication(context, AppModule.ApiProvider::class.java)
-            .activeOrderManager()
-    }
     val activeDriverOrder by activeOrderManager.activeOrderDriver.collectAsState()
 
     LaunchedEffect(Unit) {
@@ -482,7 +570,7 @@ fun DriverHomeScreen(navController: NavController) {
         activeOrderManager.loadActiveOrderForDriver()
     }
 
-    LaunchedEffect(activeDriverOrder?.id) {
+    LaunchedEffect(activeDriverOrder?.id, activeDriverOrder?.status) {
         activeDriverOrder?.let { order ->
             Log.d(TAG, "Активный заказ загружен: ${order.id}, статус: ${order.status}")
 
@@ -621,14 +709,25 @@ fun DriverHomeScreen(navController: NavController) {
         currentOrder?.let { order ->
             scope.launch {
                 try {
-                    loadDriverProfile()
                     stopNotificationSound()
-                    apiService.acceptOrder("Bearer $token", order.id, timeToArrive)
+                    val response = apiService.acceptOrder("Bearer $token", order.id, timeToArrive)
+                    if (!response.isSuccessful) {
+                        // Приём НЕ удался — не выставляем ACCEPTED (иначе на сервере остаётся
+                        // ASSIGNED и при перезаходе снова всплывает окно приёма).
+                        val reason = response.errorBody()?.string()?.take(200).orEmpty()
+                        Log.e(TAG, "Приём отклонён сервером: HTTP ${response.code()} $reason")
+                        Toast.makeText(
+                            context,
+                            "Не удалось принять заказ: ${reason.ifBlank { "ошибка ${response.code()}" }}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        loadDriverProfile()
+                        return@launch
+                    }
                     driverViewModel.setCurrentOrder(order.copy(status = "ACCEPTED"))
-
                     // Запускаем сервис на конкретный orderId — обновления придут через SseEventBus
                     TahoSseService.start(context, orderId = order.id, role = "DRIVER")
-
+                    loadDriverProfile()
                     Log.d(TAG, "Заказ принят → сервис запущен для orderId=${order.id}")
                 } catch (e: Exception) {
                     Log.e(TAG, "Ошибка принятия заказа", e)
@@ -688,6 +787,33 @@ fun DriverHomeScreen(navController: NavController) {
 
     LaunchedEffect(currentOrder) {
         Log.d(TAG, "currentOrder изменился → ${currentOrder?.id} / ${currentOrder?.status}")
+    }
+
+    // Рисуем флажки текущего заказа (откуда/куда), чтобы водитель видел заказ ещё до принятия.
+    LaunchedEffect(currentOrder?.id, mapViewState.value) {
+        val map = mapViewState.value?.mapWindow?.map
+        val mapObjects = map?.mapObjects
+        orderFromPlacemark?.let { runCatching { mapObjects?.remove(it) } }
+        orderToPlacemark?.let { runCatching { mapObjects?.remove(it) } }
+        orderFromPlacemark = null
+        orderToPlacemark = null
+
+        val order = currentOrder ?: return@LaunchedEffect
+        if (mapObjects == null) return@LaunchedEffect
+        runCatching {
+            val from = order.startPointLatLon
+            val to = order.endPointLatLon
+            orderFromPlacemark = mapObjects.addPlacemark(from).apply {
+                setIcon(fromFlagImage); setIconStyle(orderFlagStyle)
+            }
+            orderToPlacemark = mapObjects.addPlacemark(to).apply {
+                setIcon(toFlagImage); setIconStyle(orderFlagStyle)
+            }
+            // Показать обе точки — центрируемся на середине маршрута
+            val midLat = (from.latitude + to.latitude) / 2.0
+            val midLon = (from.longitude + to.longitude) / 2.0
+            map.move(CameraPosition(Point(midLat, midLon), 13f, 0f, 0f))
+        }.onFailure { Log.e(TAG, "Не удалось нарисовать флажки заказа: ${it.message}") }
     }
 
     ModalNavigationDrawer(
@@ -849,9 +975,8 @@ fun DriverHomeScreen(navController: NavController) {
                                 Log.d(TAG, "Цена за поездку ==== ${order.price}")
                                 Text(
                                     text = when {
-                                        order.price.isNullOrBlank() || order.price == "404" -> "Цена: по таксометру"
-                                        order.price == "505.0" -> "Цена будет определена при назначении водителя"
-                                        order.price == "505" -> "Цена будет определена при назначении водителя"       // или другая специальная надпись
+                                        order.price.isNullOrBlank() || isMeterPrice(order.price) -> "Цена: по таксометру"
+                                        isDriverSetPrice(order.price) -> "Цену назначаете вы"
                                         else -> "Цена: ${order.price} ₽"
                                     },
                                     color = Color.White,
@@ -863,10 +988,20 @@ fun DriverHomeScreen(navController: NavController) {
                                     Button(
                                         onClick = {
                                             stopNotificationSound()
-                                            if (showSetPriceDialog) {
-                                                // диалог цены уже открыт — ничего не делаем
-                                            } else {
-                                                showTimeToArriveDialog = true
+                                            when {
+                                                showSetPriceDialog -> { /* окно цены уже открыто */ }
+                                                isDriverSetPrice(order.price) -> {
+                                                    // 505: сначала водитель назначает цену, затем время и приём
+                                                    setPriceOrderId = order.id
+                                                    priceFromText = cleanAddr(order.startAddress)
+                                                    priceToText = cleanAddr(order.endAddress)
+                                                    scope.launch {
+                                                        priceFromText = resolveAddressForPrice(order.startAddress, order.startPointLatLon)
+                                                        priceToText = resolveAddressForPrice(order.endAddress, order.endPointLatLon)
+                                                    }
+                                                    showSetPriceDialog = true
+                                                }
+                                                else -> showTimeToArriveDialog = true
                                             }
                                         },
                                         colors = ButtonDefaults.buttonColors(containerColor = Color.White),
@@ -1529,6 +1664,8 @@ fun DriverHomeScreen(navController: NavController) {
                 if (showSetPriceDialog && setPriceOrderId != null) {
                     SetPriceDialog(
                         orderId = setPriceOrderId!!,
+                        fromText = priceFromText,
+                        toText = priceToText,
                         onConfirm = { price ->
                             scope.launch {
                                 try {

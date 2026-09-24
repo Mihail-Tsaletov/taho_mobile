@@ -105,7 +105,12 @@ object TahoNotificationHelper {
 
     /** Водитель: пришёл новый заказ */
     fun notifyDriverNewOrder(context: Context, fromAddress: String, toAddress: String, price: String?) {
-        val priceText = if (!price.isNullOrBlank() && price != "null") " • $price ₽" else " • по таксометру"
+        val priceNum = price?.trim()?.toDoubleOrNull()
+        val priceText = when {
+            price.isNullOrBlank() || price == "null" || priceNum == 404.0 -> " • по таксометру"
+            priceNum == 505.0 -> " • цену назначаете вы"   // 505 — спец-триггер, число не показываем
+            else -> " • $price ₽"
+        }
         show(
             context   = context,
             channelId = CHANNEL_NEW_ORDER,

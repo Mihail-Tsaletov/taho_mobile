@@ -40,7 +40,7 @@ class ActiveOrderManager @Inject constructor(
             if (response.isSuccessful) {
                 val orders = response.body() ?: emptyList()
                 _activeOrderDriver.value = orders.firstOrNull()
-                Log.d("ActiveOrder", "Загружен активный заказ для водителя: ${_activeOrder.value}")
+                Log.d("ActiveOrder", "Загружен активный заказ для водителя: ${_activeOrderDriver.value}")
             }
         } catch (e: Exception) {
             Log.e("ActiveOrder", "Ошибка загрузки активного заказа водителя", e)
@@ -49,5 +49,6 @@ class ActiveOrderManager @Inject constructor(
 
     fun clear() {
         _activeOrder.value = null
+        _activeOrderDriver.value = null
     }
 }
